@@ -1,0 +1,6 @@
+/.work/
+/dist/
+/game/.godot/
+*.keystore
+*.apk
+*.aab

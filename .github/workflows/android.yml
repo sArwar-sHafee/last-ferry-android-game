@@ -1,0 +1,26 @@
+name: Android APK
+on: [push, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install pinned Godot and Android tools
+        run: bash scripts/setup-android.sh
+      - name: Build and verify the APK
+        run: bash scripts/build-android.sh
+      - name: Run campaign checks
+        run: bash scripts/check.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: the-last-ferry-android
+          path: |
+            dist/the-last-ferry.apk
+            dist/the-last-ferry.apk.sha256
+          if-no-files-found: error
