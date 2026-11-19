@@ -1,4 +1,4 @@
-"""Render original short looping chapter ambiences from surf, machinery and bird motifs."""
+"""Render chapter ambience and the original story cue."""
 from pathlib import Path
 import subprocess
 import numpy as np
@@ -16,7 +16,7 @@ profiles = [
     (290, 1.125, 57, 4, -14, .25), (780, 3, 790, 8, 120, .17),
     (850, 3, 610, 2, 4, .12), (680, .75, 135, 17, -40, .20),
     (400, 4.5, 390, 3, 8, .24), (2200, 6, 44, .9, -9, .81),
-    (520, 9, 138, .5, 1, .31)]
+    (520, 9, 138, .5, 1, .31), (375, 4.5, 83, 5, 0, 0)]
 # Each entry specifies an audible foreground event, in addition to the room tone.
 # Times and pitches are fixed so the chapter beds remain reproducible.
 motifs = [
@@ -26,7 +26,7 @@ motifs = [
     ("rail", list(np.arange(.3, 17, .72)), 115), ("hooves", list(np.arange(.2, 17, .52)), 78),
     ("pressure", [1, 5.5, 10, 14.5], 60), ("echo", [1, 6.4, 12], 940),
     ("glass", [2, 6, 11, 15], 790), ("slats", list(np.arange(1, 17, 1.2)), 162),
-    ("bell", [3, 12], 518), ("thunder", [1, 8, 14], 35), ("horn", [4, 12], 108)]
+    ("bell", [3, 12], 518), ("thunder", [1, 8, 14], 35), ("horn", [4, 12], 108), ("echo", [1.4, 5.2, 11.8, 16], 710)]
 def foreground(index, side, noise):
     kind, times, pitch = motifs[index]
     result = np.zeros_like(t)
@@ -60,6 +60,7 @@ def foreground(index, side, noise):
     return result
 
 for index, (hz, period, freq, decay, sweep, water) in enumerate(profiles):
+    coastal = index in (0, 1, 3, 4, 13)
     rng = np.random.default_rng(1400 + index)
     channels = []
     for side in range(2):
@@ -70,7 +71,34 @@ for index, (hz, period, freq, decay, sweep, water) in enumerate(profiles):
         resonance = np.sin(2*np.pi*(freq*phase + sweep*phase**2*.5))
         wind = noise*(.16 + water*(.55+.45*np.cos(2*np.pi*t/6))**2)
         fade = np.minimum(1, np.minimum(t, t[-1]-t)*8)
-        channels.append((.70*wind + .09*pulse*resonance + .21*foreground(index,side,noise))*fade)
+        event = foreground(index, side, noise)
+        if coastal:
+            bed = .70*wind + .09*pulse*resonance + .21*event
+        else:
+            # Keep the inland noise floor steady and quiet. Local sounds carry the scene.
+            bed = .035*noise + .036*pulse*resonance + .29*event
+            if index in (2, 7, 9):
+                insects = (.5 + .5*np.sin(2*np.pi*(7.5 + .3*side)*t))**4
+                bed += .018*insects*np.sin(2*np.pi*(3010 + side*180)*t)
+        channels.append(bed*fade)
     subprocess.run(["ffmpeg","-loglevel","error","-y","-f","f32le","-ar",str(rate),
                     "-ac","2","-i","-","-c:a","libvorbis",str(out/f"reach{index:02}.ogg")],
                    input=np.stack(channels,axis=1).astype("<f4").tobytes(),check=True)
+
+# Measured entrances leave space for the narration to be read.
+t = np.arange(round(rate * 5.5)) / rate
+channels = []
+for side in range(2):
+    cue = np.zeros_like(t)
+    for onset, frequency, strength in [
+        (0, 146.83, .13), (.15, 220, .10), (.43, 293.66, .105),
+        (1.35, 349.23, .095), (2.24, 440, .08), (3.12, 329.63, .07)
+    ]:
+        note = np.maximum(0, t - onset - .014*side)
+        envelope = (1 - np.exp(-9*note))*np.exp(-1.15*note)
+        phase = 2*np.pi*frequency*note + .08*np.sin(2*np.pi*3*note)
+        cue += strength*envelope*(np.sin(phase) + .19*np.sin(2.002*phase))
+    channels.append(1.58*cue*np.minimum(1, (t[-1]-t)*1.3))
+subprocess.run(["ffmpeg","-loglevel","error","-y","-f","f32le","-ar",str(rate),
+                "-ac","2","-i","-","-c:a","libvorbis",str(out/"story.ogg")],
+               input=np.stack(channels,axis=1).astype("<f4").tobytes(),check=True)

@@ -25,7 +25,7 @@ func setup(spec: Dictionary, key: String, room: int, practice := false) -> void:
 	size = Vector2(960,540)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	var left := 51.0
-	var caption:="KEEPER’S LOG   /   PRACTICE" if practice else "%s   /   %s" % [Book.NUMERALS[Book.chapter(room)],Book.ROOMS[room][0].to_upper()]
+	var caption:="KEEPER’S LOG   /   PRACTICE" if practice else "%s   /   %s" % ["%02d" % (Book.chapter(room)+1),Book.ROOMS[room][0].to_upper()]
 	label(self,Rect2(left,41,350,24),caption,MONO,13,BRASS)
 	label(self,Rect2(left,85,340,68),Book.BOARD_TITLES[model.kind],SERIF,39)
 	label(self,Rect2(left,164,302,100),Book.RULES[model.kind],ThemeDB.fallback_font,18,PAPER,true)

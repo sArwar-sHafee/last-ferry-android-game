@@ -31,6 +31,11 @@ func _init(file := "user://harbor.cfg") -> void:
 	elif int(cfg.get_value("voyage","layout",1))==3:
 		var starts:=[0,9,19,30,39,49,60,68,80,91,101,111,121,131,138]
 		opened=Book.chapter(Book.migrated_room(starts[clampi(opened,0,14)]))
+	elif int(cfg.get_value("voyage","layout",1))==4:
+		opened=Book.chapter(Book.REGION_STARTS[clampi(opened,0,Book.ENVIRONMENTS.size()-1)])
+	elif int(cfg.get_value("voyage","layout",1))==5:
+		var starts:=[0,5,9,12,16,21,23,27,32,35,39,43,47,52,55,59,63,65,70,75,79,82,85,87,89]
+		opened=Book.chapter(starts[clampi(opened,0,starts.size()-1)])
 	opened=clampi(maxi(opened,Book.chapter(room)),0,Book.CHAPTERS.size()-1)
 	ended = bool(cfg.get_value("voyage","ended",false))
 	played = maxf(0,float(cfg.get_value("voyage","played",0)))
@@ -47,7 +52,7 @@ func _init(file := "user://harbor.cfg") -> void:
 func store() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("voyage","active",active)
-	cfg.set_value("voyage","layout",4)
+	cfg.set_value("voyage","layout",6)
 	cfg.set_value("voyage","room",room)
 	cfg.set_value("voyage","opened",opened)
 	cfg.set_value("voyage","ended",ended)

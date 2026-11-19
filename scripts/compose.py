@@ -36,13 +36,13 @@ for i,(name,low) in enumerate([("estuary",55),("pumphall",48),("lantern",73.416)
         fade=np.minimum(1,np.minimum(t,t[-1]-t)*2.5)
         channels.append(a*fade)
     save(name,np.stack(channels,axis=1))
-for name,dur,f in [("engage",.32,147),("step",.12,71),("land",.22,52),("splash",.85,110),(" ratchet".strip(),.18,490),("glass",.66,617),("flow",.49,186),("crate",.28,83),("save",1.3,293.66),("signal",2.6,116.54)]:
+for name,dur,f in [("engage",.32,147),("step",.12,71),("land",.22,52),(" ratchet".strip(),.18,490),("glass",.66,617),("flow",.49,186),("crate",.28,83),("save",1.3,293.66),("signal",2.6,116.54)]:
     t=timeline(dur)
     if name=="signal":a=horn(t,f)
     elif name in ("glass","save"):
         a=(tone(t,f)+.38*tone(t,f*2.01)+.23*tone(t,f*2.99))*.23*np.exp(-t*4)*(1-np.exp(-t*40))
     else:
-        a=(.65*noise(t,1000 if name!="splash" else 3500)+.24*tone(t,f*np.exp(-t*.6))+.08*tone(t,f*2.4))*np.exp(-t*3.8/dur)*(1-np.exp(-t*160))
+        a=(.65*noise(t,1000)+.24*tone(t,f*np.exp(-t*.6))+.08*tone(t,f*2.4))*np.exp(-t*3.8/dur)*(1-np.exp(-t*160))
     save(name,a*np.minimum(1,(dur-t)*40))
 t=timeline(18);a=np.zeros_like(t)
 for beat,notes in [(0,(146.83,220)),(3,(164.81,246.94)),(6,(196,293.66)),(9,(220,329.63)),(12,(146.83,220,293.66,369.99))]:

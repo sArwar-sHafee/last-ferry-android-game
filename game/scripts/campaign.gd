@@ -1,6 +1,30 @@
 extends RefCounted
 
-const CHAPTERS := ["The Landing","Mangrove Canopy","The Sluice House","The Upper Sidings","Boar Run","Lantern Ridge","The Lens Works","The Storm Beacon"]
+# First scene, title, backdrop, and ambience for each chapter.
+const CHAPTERS := [
+	[0,"The Landing",preload("res://art/harbor.webp"),0],
+	[4,"The Tidal Quays",preload("res://art/reach00.webp"),0],
+	[8,"The Customs Reach",preload("res://art/reach01.webp"),1],
+	[13,"Mangrove Canopy",preload("res://art/reach02.webp"),2],
+	[18,"The Sluice House",preload("res://art/reach03.webp"),3],
+	[23,"The Pumpworks",preload("res://art/pumpworks.webp"),8],
+	[28,"The Sea Wall",preload("res://art/reach04.webp"),4],
+	[33,"The Freight Approach",preload("res://art/reach05.webp"),5],
+	[37,"The Freightyard",preload("res://art/freightyard.webp"),5],
+	[42,"The Upper Sidings",preload("res://art/reach06.webp"),6],
+	[47,"Boar Run",preload("res://art/reach07.webp"),7],
+	[52,"Charcoal Ridge",preload("res://art/reach09.webp"),9],
+	[57,"The Engine Galleries",preload("res://art/reach08.webp"),8],
+	[62,"The Limestone Cut",preload("res://art/reach15.webp"),15],
+	[67,"The Prism House",preload("res://art/reach10.webp"),10],
+	[72,"The Lens Works",preload("res://art/lensworks.webp"),10],
+	[77,"The Shutter House",preload("res://art/reach11.webp"),11],
+	[82,"The Tower Shaft",preload("res://art/reach12.webp"),12],
+	[85,"The Breakwater",preload("res://art/breakwater.webp"),4],
+	[87,"The Lantern Cage",preload("res://art/reach14.webp"),14],
+	[89,"The Storm Beacon",preload("res://art/reach13.webp"),13],
+]
+const REGION_STARTS := [0,12,23,35,47,59,70,82,94]
 const ENVIRONMENTS := [0,2,3,6,7,9,10,13]
 # Source addresses also migrate logbooks from the original 150-location route.
 const SOURCE_ROOMS := [
@@ -12,7 +36,6 @@ const SOURCE_ROOMS := [
 	88,91,92,93,94,95,96,97,98,99,100,
 	101,102,103,104,105,106,107,108,109,110,114,118,
 	129,131,132,133,134,135,136,137,144,147,148,149]
-const NUMERALS := ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV"]
 const EPIGRAPHS := [
 	"Three short blasts from beyond the bar. A ferry, asking for a light.",
 	"The customs lamps have gone out. The old clock is still ticking.",
@@ -23,7 +46,7 @@ const EPIGRAPHS := [
 	"The passing track climbs above a yard of motionless wagons.",
 	"The boar paws the charcoal road. Beyond the gate, the culverts have washed out.",
 	"The pipes tremble. There is still pressure in the old main.",
-	"Chalk marks lead up the ridge. Keep the lamp close inside the hill.",
+	"Chalk marks lead up the ridge, past the old engine galleries.",
 	"Through a crack in the shutters, a thread of light.",
 	"The sea appears between the shutters, one blade at a time.",
 	"The last service stair rises behind the glassworks.",
@@ -72,7 +95,24 @@ const LANDMARKS := [
 	["The Lantern Cage", "crate @f10 hoist @l9 shutters steps @l12 ray"],
 	["Light the Fairway", "steps @p10 float ledge @l10 ray summit"]
 ]
-const CHAPTER_STARTS := [0,12,23,35,47,59,70,82,94]
+static var CHAPTER_STARTS: Array[int] = chapter_starts()
+
+static func chapter_starts() -> Array[int]:
+	var starts: Array[int] = []
+	for entry in CHAPTERS: starts.append(entry[0])
+	starts.append(SOURCE_ROOMS.size())
+	return starts
+
+static func region(room: int) -> int:
+	return clampi(REGION_STARTS.bsearch(room,false)-1,0,ENVIRONMENTS.size()-1)
+
+static func chapter_name(index: int) -> String:
+	return CHAPTERS[index][1]
+
+static func chapter_label(room: int) -> String:
+	var index:=chapter(room)
+	return "%02d   /   %s" % [index+1,chapter_name(index).to_upper()]
+
 const ROOMS_PER_DISTRICT := 25
 
 static func district(room: int) -> int:
@@ -107,10 +147,10 @@ static func curate_rooms() -> Array:
 			["ride","ride","ride"],["steps drop","ledge steps","drop ledge"],
 			["ray shutters","ledge ray","shutters steps"],["storm_island gap","steps storm_island","loose storm_island"]]
 		if i>0:
-			var section:String=passages[chapter(i)][i%3]
+			var section:String=passages[region(i)][i%3]
 			var lamp:=str(entry[1]).find(" @")
 			if lamp>=0:
-				if chapter(i)==6: lamp=str(entry[1]).find(" ",lamp+2)
+				if region(i)==6: lamp=str(entry[1]).find(" ",lamp+2)
 				if lamp<0: lamp=str(entry[1]).length()
 				entry[1]=str(entry[1]).insert(lamp," "+section)
 		rooms.append(entry)
@@ -120,7 +160,7 @@ static func migrated_room(source: int) -> int:
 	return mini(SOURCE_ROOMS.bsearch(source),SOURCE_ROOMS.size()-1)
 
 static func arrival_text(index: int) -> String:
-	if index==CHAPTER_STARTS[chapter(index)]: return EPIGRAPHS[ENVIRONMENTS[chapter(index)]]
+	if index==REGION_STARTS[region(index)]: return EPIGRAPHS[ENVIRONMENTS[region(index)]]
 	if index==ROOMS.size()-1: return DISPATCHES.back()
 	var source:int=SOURCE_ROOMS[index]
 	if source%5==0 and source<145: return DISPATCHES[floori(source/5.0)]

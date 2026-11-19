@@ -52,7 +52,7 @@ func _draw() -> void:
 		"play":
 			if not route: return
 			draw_texture_rect(header_gradient,Rect2(0,0,960,111),false)
-			draw_string(MONO,Vector2(29,30),"%s   /   %s" % [Book.NUMERALS[Book.chapter(route.room)],Book.CHAPTERS[Book.chapter(route.room)].to_upper()],HORIZONTAL_ALIGNMENT_LEFT,-1,13,BRASS)
+			draw_string(MONO,Vector2(29,30),Book.chapter_label(route.room),HORIZONTAL_ALIGNMENT_LEFT,-1,13,BRASS)
 			draw_string(SERIF,Vector2(28,62),Book.ROOMS[route.room][0],HORIZONTAL_ALIGNMENT_LEFT,-1,29,PAPER)
 			var pause_rect := Rect2(881,14,45,43)
 			draw_rect(pause_rect,Color(.06,.11,.12,.58))
@@ -88,7 +88,7 @@ func _draw() -> void:
 			if fade>0: draw_rect(Rect2(0,0,960,540),Color(.035,.07,.08,minf(.9,fade*2.1)))
 		"aim","arrival":
 			draw_texture_rect(header_gradient,Rect2(0,0,960,125),false)
-			draw_string(MONO,Vector2(35,37),"VIII   /   THE STORM BEACON",HORIZONTAL_ALIGNMENT_LEFT,-1,14,BRASS)
+			draw_string(MONO,Vector2(35,37),Book.chapter_label(Book.ROOMS.size()-1),HORIZONTAL_ALIGNMENT_LEFT,-1,14,BRASS)
 			draw_string(SERIF,Vector2(34,79),"Light the fairway" if screen=="aim" else "The ferry answers.",HORIZONTAL_ALIGNMENT_LEFT,-1,38,PAPER)
 		"final":
 			draw_texture_rect(title_gradient,Rect2(0,0,960,540),false)

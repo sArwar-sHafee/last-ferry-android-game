@@ -23,6 +23,9 @@ func run() -> void:
 	await capture("title")
 	game.set_screen("chapters")
 	await capture("chapters")
+	for page in [1,2]:
+		game.turn_chapter_page(1)
+		await capture("chapters-"+str(page+1))
 	game.new_game()
 	game.set_physics_process(false)
 	game.hud.fade=0
@@ -101,7 +104,7 @@ func run() -> void:
 		game.hud.fade=0
 		game.hud.button_scale=1
 		await capture("low-water" if index==25 else "upper-tower")
-	for shot in [["canopy",21,.46],["boar",68,.18],["cave",94,.50],["lightning",132,.30],["storm-dark",132,.30]]:
+	for shot in [["canopy",21,.46],["boar",68,.18],["cave",94,.50],["lightning",144,.30],["storm-afterglow",144,.30],["storm-dark",144,.30]]:
 		game.enter_room(game.Book.migrated_room(shot[1]),[])
 		r=game.route
 		var target:float=r.width*shot[2]
@@ -111,7 +114,7 @@ func run() -> void:
 			break
 		r.camera=clampf(r.pos.x-385,0,maxf(0,r.width-960))
 		r.camera_y=r.vertical_view()
-		r.time=2.0 if shot[0]=="storm-dark" else .3
+		r.time={"lightning":2.45,"storm-afterglow":2.94,"storm-dark":3.85}.get(shot[0],.3)
 		for ride in r.rides:
 			if r.pos.x>=ride.start and r.pos.x<ride.end:
 				r.mounted=ride.type

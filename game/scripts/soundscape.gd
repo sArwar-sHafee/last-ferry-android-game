@@ -3,6 +3,7 @@ extends Node
 var accent := AudioStreamPlayer.new()
 var cooldown := 0.0
 var amb := AudioStreamPlayer.new()
+var story := AudioStreamPlayer.new()
 var layers: Array[AudioStreamPlayer] = []
 var cursor := 0
 var ambience := ""
@@ -15,6 +16,8 @@ func _ready() -> void:
 		samples[key]=load("res://audio/%s.ogg" % key)
 	add_child(accent)
 	accent.volume_db=-5
+	add_child(story)
+	story.stream=preload("res://audio/story.ogg")
 	add_child(amb)
 	amb.volume_db = -4
 	for i in 6:
@@ -36,10 +39,26 @@ func set_enabled(value: bool) -> void:
 	enabled = value
 	if not value:
 		accent.stop()
+		story.stop()
 		amb.stop()
 		for voice in layers: voice.stop()
 	elif amb.stream != null:
 		amb.play()
+
+func play_story(seconds: float) -> void:
+	story.stop()
+	if not enabled or seconds<=0: return
+	story.volume_db=-9
+	story.play()
+
+func fade_story(seconds: float) -> void:
+	var level:=minf(seconds,1.0) if story.playing else 0.0
+	amb.volume_db=lerpf(-4,-9,level)
+	if not story.playing: return
+	if level<=0:
+		story.stop()
+	else:
+		story.volume_db=-9+linear_to_db(level)
 
 func cue(key: String) -> void:
 	if not enabled or not samples.has(key): return

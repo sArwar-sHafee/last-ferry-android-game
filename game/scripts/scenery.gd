@@ -4,22 +4,44 @@ const Book = preload("res://scripts/campaign.gd")
 const Passage = preload("res://scripts/passage.gd")
 const SERIF = preload("res://art/fonts/Yrsa-Medium.ttf")
 const MONO = preload("res://art/fonts/LiberationMono-Regular.ttf")
-const SKY := [
-	preload("res://art/harbor.webp"), preload("res://art/pumpworks.webp"),
-	preload("res://art/freightyard.webp"), preload("res://art/pumpworks.webp"),
-	preload("res://art/lensworks.webp"), preload("res://art/breakwater.webp")]
+const TITLE_SKY := preload("res://art/harbor.webp")
+const FINALE_SKY := preload("res://art/reach14.webp")
 const INK := Color("#152326")
 const DARK := Color("#1e3032")
 const EDGE := Color("#80908a")
 const BRASS := Color("#efc487")
 const PAPER := Color("#e9e6d3")
-const REACH_SKIES := [preload("res://art/reach00.webp"), preload("res://art/reach01.webp"), preload("res://art/reach02.webp"), preload("res://art/reach03.webp"), preload("res://art/reach04.webp"), preload("res://art/reach05.webp"), preload("res://art/reach06.webp"), preload("res://art/reach07.webp"), preload("res://art/reach08.webp"), preload("res://art/reach09.webp"), preload("res://art/reach10.webp"), preload("res://art/reach11.webp"), preload("res://art/reach12.webp"), preload("res://art/reach13.webp"), preload("res://art/reach14.webp"), preload("res://art/reach15.webp")]
+const STORM_LIGHT := preload("res://scripts/storm_light.gdshader")
+const STRIKE_TIMES := [2.4, 7.9, 12.2, 19.6, 24.4, 31.0]
+const STORM_PERIOD := 38.7
+var storm_shade := ColorRect.new()
+var storm_material := ShaderMaterial.new()
+var sky_glow := GradientTexture2D.new()
+var strike_seed := -1
+var strike_bolt := PackedVector2Array()
+var strike_branches: Array[PackedVector2Array] = []
 var route: Passage
 var mode := "menu"
 var age := 0.0
 var finale_aim := 0.0
 var finale_lit := false
 var arrival := 0.0
+
+func _ready() -> void:
+	storm_material.shader=STORM_LIGHT
+	storm_shade.material=storm_material
+	storm_shade.size=Vector2(960,540)
+	storm_shade.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	storm_shade.hide()
+	add_child(storm_shade)
+
+	var gradient:=Gradient.new()
+	gradient.colors=PackedColorArray([Color(.68,.76,1,.55),Color(.46,.57,.84,.15),Color(.46,.57,.84,0)])
+	gradient.offsets=PackedFloat32Array([0,.48,1])
+	sky_glow.gradient=gradient
+	sky_glow.fill=GradientTexture2D.FILL_RADIAL
+	sky_glow.fill_from=Vector2(.5,.5)
+	sky_glow.fill_to=Vector2(1,.5)
 
 func poly(points: Array, color: Color) -> void:
 	draw_colored_polygon(PackedVector2Array(points),color)
@@ -40,11 +62,13 @@ func _draw() -> void:
 	var sky_rect:=Rect2(-offset*96,-8,1056,550)
 	if playing:
 		sky_rect=Rect2(-offset*212,route.camera_y-132+minf(125,-route.camera_y*.23),1218,686)
-	var sky:Texture2D=SKY[chapter]
+	var sky:Texture2D=FINALE_SKY if mode=="ending" else TITLE_SKY
+	var chapter_index:=Book.chapter(route.room) if playing else -1
 	if playing:
-		var reach:int=Book.ENVIRONMENTS[Book.chapter(route.room)]
-		sky=REACH_SKIES[15 if reach==9 and offset>.24 and offset<.83 else reach]
+		sky=Book.CHAPTERS[chapter_index][2]
 	draw_texture_rect(sky,sky_rect,false)
+	storm_shade.visible=chapter_index==Book.CHAPTERS.size()-1
+	if storm_shade.visible: draw_storm(cam)
 	if playing:
 		draw_weather(cam,chapter)
 		draw_waterfront(cam,chapter)
@@ -139,19 +163,62 @@ func _draw() -> void:
 			var y := 390+fmod(j*59.2,140)
 			line(Vector2(x,y),Vector2(x+20+j%12,y),Color(.82,.85,.77,.11),1)
 	atmosphere(cam)
-	if playing:
-		var region:int=Book.ENVIRONMENTS[Book.chapter(route.room)]
-		if region==13:
-			var phase:=fposmod(route.time,18)
-			var since:=phase if phase<5 else (phase-5 if phase<11 else phase-11)
-			draw_rect(Rect2(0,route.camera_y,960,540),Color(0.01,.018,.028,smoothstep(.72,1,since)))
-		elif region==9 and offset>.24 and offset<.83:
-			var center:=route.pos-Vector2(cam,21)
-			for k in 48:
-				var a:=Vector2.from_angle(TAU*k/48.0)
-				var b:=Vector2.from_angle(TAU*(k+1)/48.0)
-				poly([center+a*104,center+b*104,center+b*1500,center+a*1500],Color(.014,.022,.025))
-				draw_colored_polygon(PackedVector2Array([center+a*65,center+b*65,center+b*104,center+a*104]),Color(0,0,0,.35))
+
+func draw_storm(cam: float) -> void:
+	var phase:=fposmod(route.time,STORM_PERIOD)
+	var strike:=STRIKE_TIMES.bsearch(phase,false)-1
+	var flash:=0.0
+	if strike>=0:
+		var since:=phase-float(STRIKE_TIMES[strike])
+		if since<1.4:
+			# Two return strokes share the same channel. Diffuse cloud light lingers
+			# after each short, bright pulse.
+			var first:=lightning_pulse(since,.036,.088)
+			var second:=.71*lightning_pulse(since-.28,.025,.072)
+			var scatter:=.23*lightning_pulse(since,.055,.31)
+			flash=clampf(first+second+scatter,0,1)
+			var seed_value:=1+route.room*103+floori(route.time/STORM_PERIOD)*17+strike
+			if strike_seed!=seed_value: build_lightning(seed_value)
+			var sky_origin:=Vector2(0,route.camera_y)
+			var cloud:=sky_origin+strike_bolt[0].lerp(strike_bolt[4],.55)
+			draw_texture_rect(sky_glow,Rect2(cloud-Vector2(290,118),Vector2(580,236)),
+				false,Color(1,1,1,flash))
+			var bolt_light:=clampf(first+second,0,1)
+			draw_set_transform(sky_origin)
+			draw_lightning_line(strike_bolt,bolt_light,1.0)
+			for branch in strike_branches: draw_lightning_line(branch,bolt_light*.77,.57)
+			draw_set_transform(Vector2.ZERO)
+	storm_shade.position.y=route.camera_y
+	storm_material.set_shader_parameter("flash",flash)
+	storm_material.set_shader_parameter("lantern",route.pos-Vector2(cam-float(route.face)*10,route.camera_y+21))
+
+func lightning_pulse(seconds: float, attack: float, decay: float) -> float:
+	return smoothstep(0,attack,seconds)*exp(-maxf(0,seconds-attack)/decay)
+
+func build_lightning(seed_value: int) -> void:
+	strike_seed=seed_value
+	var rng:=RandomNumberGenerator.new()
+	rng.seed=seed_value
+	strike_bolt.clear()
+	strike_branches.clear()
+	var start:=Vector2(rng.randf_range(185,765),rng.randf_range(-30,16))
+	var drift:=rng.randf_range(-93,93)
+	var depth:=rng.randf_range(153,228)
+	for i in 10:
+		var progress:=i/9.0
+		strike_bolt.append(start+Vector2(drift*progress+rng.randf_range(-21,21),depth*progress))
+	for i in [2,4,6]:
+		var path:=PackedVector2Array([strike_bolt[i]])
+		var side:=-1 if i==4 else 1
+		for j in 4:
+			path.append(path[-1]+Vector2(side*rng.randf_range(11,35),rng.randf_range(6,23)))
+		strike_branches.append(path)
+
+func draw_lightning_line(path: PackedVector2Array, energy: float, thickness: float) -> void:
+	if energy<.02: return
+	draw_polyline(path,Color(.48,.62,1,.27*energy),9*thickness,true)
+	draw_polyline(path,Color(.66,.77,1,.55*energy),3.6*thickness,true)
+	draw_polyline(path,Color(.92,.96,1,energy),1.45*thickness,true)
 
 func draw_weather(cam: float,chapter: int) -> void:
 	var reach:=route.room%Book.ROOMS_PER_DISTRICT
@@ -338,7 +405,7 @@ func draw_platform(p: Dictionary,cam: float) -> void:
 		if style=="ray":
 			line(Vector2(x+w*.5,y+10),Vector2(x+w*.5,495),Color(.86,.75,.49,.25),2)
 		return
-	draw_ground(x,y,w,Book.chapter(route.room))
+	draw_ground(x,y,w,Book.region(route.room))
 
 # The flat upper edge is the collision surface. Material details hang below it.
 func draw_ground(x: float,y: float,w: float,chapter: int) -> void:

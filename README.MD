@@ -23,13 +23,13 @@ The game saves at crossing entrances and checkpoint lamps. **Continue** returns 
 
 ## Campaign
 
-The keeper crosses **94 named locations across eight chapters, with 11 or 12 locations per chapter**. All eight are open in the chapter picker for debugging, including on a fresh installation. Chapter replay keeps the main voyage checkpoint and earned unlocks separate. The first chart appears at the landing. After solving a required panel, you get seven minutes of active traversal before another checkpoint can offer a puzzle. Unoccupied stations light as you walk past. Pausing, using an instrument, and browsing menus leave the interval frozen.
+The keeper crosses **94 named locations across 21 chapters, with two to five locations per chapter**. All chapters are open in the chapter picker for debugging, including on a fresh installation. Chapter replay keeps the main voyage checkpoint and earned unlocks separate. The first chart appears at the landing. After solving a required panel, you get seven minutes of active traversal before another checkpoint can offer a puzzle. Unoccupied stations light as you walk past. Pausing, using an instrument, and browsing menus leave the interval frozen.
 
 Seven locations have a two-chamber lock. Fill chamber I from the bank, board the first pontoon, then tap the hand once to ride it across to chamber II. Elsewhere, the route crosses spillways, tilting bridges, high aqueducts, and counterweight lifts. The opening quay has four rotten planks. The Broken Jetty has ten. Tidal crossings range from one moving deck to five.
 
 The eight puzzle categories rotate in order. Plot a course through buoys, switch a relay grid, balance the bell, route a mirror beam, push freight, join pressure pipes, clear a skiff channel, and meter sluice water. The workshop opens all eight from the title screen. Use **Next layout** to browse all 66 boards at any time.
 
-![Platform materials in the eight chapters](docs/chapter-materials.webp)
+![Platform materials across the voyage](docs/chapter-materials.webp)
 
 The harbor hound barks before charging and turns at the yard posts. Jump its first pass, then watch behind you for the return sprint. Crates can be pushed or pulled while holding the hand button. The keeper faces the crate in both directions. Overhead hoists run on fixed rails, and vertical lift cages travel between guides with a counterweight.
 

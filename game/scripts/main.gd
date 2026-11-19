@@ -33,6 +33,8 @@ var horn_count := 0
 var ready_game := false
 var last_system_back := -1000
 var replay_time := 0.0
+var chapter_page := 0
+const CHAPTERS_PER_PAGE := 9
 var practice_pages := {}
 var practicing := false
 var workshop_return := "menu"
@@ -81,6 +83,8 @@ func set_screen(next: String) -> void:
 	screen = next
 	if next in ["menu","chapters","aim","final"]: audio.accent.stop()
 	audio.accent.stream_paused=next!="play"
+	if next in ["menu","chapters","aim","final"]: audio.story.stop()
+	audio.story.stream_paused=next!="play"
 	audio.amb.volume_db=-11 if next in ["pause","settings","console"] else -4
 	hud.screen = next
 	hud.clear_children()
@@ -180,7 +184,8 @@ func enter_room(index: int, cleared: Array) -> void:
 	hud.notice = Book.arrival_text(index)
 	hud.fade=.40
 	hud.intro = 5.5 if not hud.notice.is_empty() else 0.0
-	audio.surround(Book.ENVIRONMENTS[Book.chapter(index)])
+	audio.surround(Book.CHAPTERS[Book.chapter(index)][3])
+	audio.play_story(hud.intro)
 	if not replay:
 		logbook.room = index
 		logbook.cleared = route.completed.duplicate()
@@ -209,7 +214,7 @@ func pause_game() -> void:
 
 func pause_menu() -> void:
 	title("KEEPER'S LOG   /   PAUSED",Book.ROOMS[route.room][0])
-	hud.label(hud,Rect2(56,151,550,35),"Chapter %s  ·  %s" % [Book.NUMERALS[Book.chapter(route.room)],Book.CHAPTERS[Book.chapter(route.room)]],SERIF,26,hud.MUTE)
+	hud.label(hud,Rect2(56,151,550,35),"Chapter %02d  ·  %s" % [Book.chapter(route.room)+1,Book.chapter_name(Book.chapter(route.room))],SERIF,26,hud.MUTE)
 	hud.button(hud,Rect2(56,228,196,52),"Resume",func(): set_screen(resume_to),true)
 	hud.button(hud,Rect2(266,228,210,52),"Restart checkpoint",func(): enter_room(route.room,route.completed))
 	hud.button(hud,Rect2(56,298,196,49),"Settings",func(): open_settings("pause"))
@@ -257,16 +262,25 @@ func toggle_sound() -> void:
 
 func chapters() -> void:
 	title("KEEPER'S LOG","Chapters")
-	for i in Book.CHAPTERS.size():
-		var x := 56+(i%3)*286
-		var y := 146+floori(i/3.0)*55
-		var b := hud.button(hud,Rect2(x,y,272,48),"%s     %s" % [Book.NUMERALS[i],Book.CHAPTERS[i]],play_chapter.bind(i))
+	var page_count:=ceili(float(Book.CHAPTERS.size())/CHAPTERS_PER_PAGE)
+	var first:=chapter_page*CHAPTERS_PER_PAGE
+	for i in range(first,mini(first+CHAPTERS_PER_PAGE,Book.CHAPTERS.size())):
+		var cell:=i-first
+		var x := 56+(cell%3)*286
+		var y := 146+floori(cell/3.0)*65
+		var b := hud.button(hud,Rect2(x,y,272,54),"%02d     %s" % [i+1,Book.chapter_name(i)],play_chapter.bind(i))
 		b.disabled = i>logbook.opened and not ProjectSettings.get_setting("ferry/testing/open_chapters",false)
 		b.tooltip_text="Complete the preceding chapter to unlock." if b.disabled else "Replay from the chapter entrance."
 		if b.disabled: b.modulate=Color(.63,.67,.66,.8)
 	hud.button(hud,Rect2(56,437,130,47),"Back",func(): set_screen("menu"))
-
+	hud.button(hud,Rect2(210,437,87,47),"Previous",turn_chapter_page.bind(-1)).disabled=chapter_page==0
+	hud.label(hud,Rect2(314,437,110,47),"Page %d / %d" % [chapter_page+1,page_count],MONO,15,hud.PAPER)
+	hud.button(hud,Rect2(430,437,84,47),"Next",turn_chapter_page.bind(1)).disabled=chapter_page==page_count-1
 	hud.button(hud,Rect2(580,437,298,47),"Practice station puzzles",open_workshop.bind("chapters"))
+
+func turn_chapter_page(direction: int) -> void:
+	chapter_page+=direction
+	set_screen("chapters")
 
 func open_workshop(from: String) -> void:
 	workshop_return=from
@@ -316,7 +330,7 @@ func licenses() -> void:
 	box.wrap_mode=TextEdit.LINE_WRAPPING_BOUNDARY
 	box.position=Vector2(56,145)
 	box.size=Vector2(846,252)
-	var notices:=PackedStringArray([Engine.get_license_text(),FileAccess.get_file_as_string("res://audio/bark-license.txt"),FileAccess.get_file_as_string("res://art/fonts/notices.txt")])
+	var notices:=PackedStringArray([Engine.get_license_text(),FileAccess.get_file_as_string("res://audio/bark-license.txt"),FileAccess.get_file_as_string("res://audio/splash-license.txt"),FileAccess.get_file_as_string("res://art/fonts/notices.txt")])
 	for component in Engine.get_copyright_info():
 		notices.append(str(component.name))
 		for part in component.parts:
@@ -388,6 +402,7 @@ func solve_console() -> void:
 	set_screen("play")
 	hud.notice="The transmission catches. The way is open."
 	hud.intro=2.7
+	audio.play_story(hud.intro)
 
 func room_finished() -> void:
 	checkpoint()
@@ -542,6 +557,7 @@ func _process(dt: float) -> void:
 		else: logbook.played+=dt
 	if screen=="play":
 		hud.intro=maxf(0,hud.intro-dt)
+		audio.fade_story(hud.intro)
 		hud.fade=maxf(0,hud.fade-dt)
 	if screen=="aim":
 		aim=clampf(aim+Input.get_axis("ui_left","ui_right")*dt*.33,0,1)

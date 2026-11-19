@@ -103,7 +103,7 @@ func terrace_to(height: float) -> void:
 const PLANK_RUNS := [4,3,6,4,8,5,3,7,10,5,4]
 const FLOAT_RUNS := [2,1,3,2,4,1,3,5,2]
 const PLANK_WIDTHS := [71,60,77,64,69,58]
-const PLANK_GAPS := [49,60,45,65,54,59]
+const PLANK_GAPS := [56,66,52,72,61,65]
 
 func plank_run(pattern: int, span_count := 0) -> void:
 	dock(68)
@@ -233,7 +233,7 @@ func build_section(token: String) -> void:
 			dock(45)
 		"gap":
 			dock(54)
-			_x += 94
+			_x += 102
 			dock(122)
 		"steps":
 			for rise in [26,28,22]:
@@ -438,12 +438,19 @@ func update_hound(d: Dictionary,dt: float) -> void:
 				d.facing=-1
 
 func operate_valve() -> bool:
-	if near_valve<0: return false
-	var d: Dictionary=devices[near_valve]
-	d.mode = 1 if valve_action=="Fill chamber I" or int(d.mode)==2 else 2
-	if d.mode==2:
+	# Touch and its emulated mouse click can arrive in the same physics frame.
+	if transferring>=0: return true
+	if near_valve<0 or death_timer>0: return false
+	var lock:Dictionary=devices[near_valve]
+	if valve_action=="Transfer to II":
+		lock.mode=2
 		transferring=grounded
 		vel=Vector2.ZERO
+		buffer=0
+	else:
+		lock.mode=1
+	near_valve=-1
+	valve_action=""
 	events.append("flow")
 	return true
 
@@ -595,7 +602,7 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 		pos.y=pontoon.pos.y
 		near_valve=-1
 		track_keeper(dt)
-		if float(lock.second)>=1:
+		if float(lock.first)>=1 and float(lock.second)>=1:
 			grounded=transferring+1
 			transferring=-1
 		return

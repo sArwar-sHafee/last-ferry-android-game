@@ -108,7 +108,8 @@ func pilot(r: Passage) -> Array:
 	var edge:float=p.pos.x+p.w
 	var lead:float=edge-r.pos.x
 	var gap:float=nxt.pos.x-edge
-	if gap>6 and lead<19:
+	var jump_lead:=9.0 if gap>=100 else 19.0
+	if gap>6 and lead<jump_lead:
 		# Wait for traveling ferries and lifting hooks before stepping off.
 		if gap>50 and (p.delta.x!=0 or nxt.delta.x!=0):
 			return [0,false,false] if lead>5 else [-.4,false,false]
@@ -157,7 +158,17 @@ func touch(index: int,at: Vector2,pressed: bool) -> void:
 	game._input(e)
 
 func lifecycle_checks() -> void:
+	game.audio.set_enabled(true)
 	game.new_game()
+	check(game.hud.intro>0 and game.audio.story.playing,"opening narration starts the story score")
+	game.pause_game()
+	check(game.audio.story.stream_paused,"story score pauses with the text")
+	game.back()
+	check(not game.audio.story.stream_paused,"resuming unpauses the story score")
+	game._process(game.hud.intro-.5)
+	check(game.audio.story.volume_db<-9,"story score fades with the text")
+	game._process(.6)
+	check(not game.audio.story.playing,"story score stops when the text clears")
 	for j in 4: game._physics_process(1.0/60)
 	touch(1,game.hud.zones().right,true)
 	touch(2,game.hud.zones().jump,true)
@@ -479,38 +490,68 @@ func vehicle_checks() -> void:
 		check(r.active_ride==-1 and vehicle.arrived and vehicle.position==Vector2(vehicle.end,height),"dismount leaves the ride at the terminus")
 
 func stationary_transfer_check() -> void:
-	game.enter_room(Book.migrated_room(25),["w3"])
-	var r:=game.route
-	for i in r.platforms.size():
-		var p:Dictionary=r.platforms[i]
-		if p.style!="chamber" or p.side!=0: continue
-		var lock:Dictionary=r.devices[p.device]
-		lock.mode=1
-		lock.first=1.0
-		r.update_platforms()
-		r.pos=p.pos+Vector2(p.w*.84,0)
-		r.grounded=i
-		r.step(1.0/60,0,false,false)
-		var hand:Vector2=game.hud.zones().use
-		touch(0,hand,true)
-		touch(0,hand,false)
-		for frame in 105: r.step(1.0/60,0,false,false)
-		check(lock.mode==2 and r.grounded==i+1 and r.death_timer==0,"one hand tap carries stationary keeper onto chamber II")
-		break
+	var hand:Vector2=game.hud.zones().use
+	for room in Book.ROOMS.size():
+		var layout:=Passage.new(room)
+		var cleared:Array=layout.stations.map(func(station): return station.key)
+		for i in layout.platforms.size():
+			var platform:Dictionary=layout.platforms[i]
+			if platform.style!="chamber" or platform.side!=0: continue
+			for fill in [0.72,1.0]:
+				game.enter_room(room,cleared)
+				var r:=game.route
+				var pontoon:Dictionary=r.platforms[i]
+				var lock:Dictionary=r.devices[pontoon.device]
+				lock.mode=1
+				lock.first=fill
+				r.update_platforms()
+				r.pos=pontoon.pos+Vector2(pontoon.w*.84,0)
+				r.grounded=i
+				r.step(1.0/60,0,false,false)
+				check(r.valve_action=="Transfer to II","chamber I offers transfer in room "+str(room))
+				# Touch and its emulated click can arrive before the next physics tick.
+				for press in 2:
+					touch(press,hand,true)
+					touch(press,hand,false)
+				for frame in 105: r.step(1.0/60,0,false,false)
+				check(lock.mode==2 and r.transferring<0 and r.grounded==i+1 and r.death_timer==0,
+					"duplicate presses still complete the transfer in room "+str(room))
+				var landing_x:=r.pos.x
+				r.step(1.0/60,1,true,false)
+				for frame in 13: r.step(1.0/60,1,false,false)
+				check(r.pos.x>landing_x+10 and r.death_timer==0,"movement resumes after transfer in room "+str(room))
 
 func debug_chapter_checks() -> void:
-	check(Book.CHAPTERS.size()==8 and Book.CHAPTER_STARTS.back()==Book.ROOMS.size(),"eight variable-length chapters")
+	check(Book.CHAPTERS.size()==21 and Book.CHAPTER_STARTS.back()==Book.ROOMS.size(),"21 chapters cover every scene")
+	var backgrounds:={}
 	var saved:=Logbook.new()
+	game.chapter_page=0
+	game.set_screen("chapters")
 	for i in Book.CHAPTERS.size():
-		game.set_screen("chapters")
+		var count:=Book.CHAPTER_STARTS[i+1]-Book.CHAPTER_STARTS[i]
+		check(count>=2 and count<=5,"short chapter "+str(i+1))
+		var backdrop:Texture2D=Book.CHAPTERS[i][2]
+		check(not backgrounds.has(backdrop.resource_path.get_file()),"distinct backdrop for chapter "+str(i+1))
+		backgrounds[backdrop.resource_path.get_file()]=true
+		check(ResourceLoader.exists("res://audio/reach%02d.ogg" % Book.CHAPTERS[i][3]),"chapter ambience is packaged")
 		var buttons:=game.hud.get_children().filter(func(node): return node is Button)
-		var entry:Button=buttons[i]
-		check(not entry.disabled and Book.CHAPTERS[i] in entry.text,"unlocked chapter "+str(i+1))
+		if i>0 and i%game.CHAPTERS_PER_PAGE==0:
+			var next:Button=buttons.filter(func(button): return button.text=="Next")[0]
+			check(not next.disabled,"can open the next chapter page")
+			next.pressed.emit()
+			buttons=game.hud.get_children().filter(func(node): return node is Button)
+		var entry:Button=buttons[i%game.CHAPTERS_PER_PAGE]
+		check(not entry.disabled and Book.chapter_name(i) in entry.text,"unlocked chapter "+str(i+1))
 		entry.pressed.emit()
 		check(game.replay and game.route.room==Book.CHAPTER_STARTS[i],"correct replay entrance")
 		game.enter_room(Book.CHAPTER_STARTS[i+1]-1,[])
 		game.room_finished()
-		check(game.screen==("aim" if i==7 else "chapters"),"chapter boundary")
+		if i==Book.CHAPTERS.size()-1:
+			check(game.screen=="aim","last chapter reaches the beacon")
+		else:
+			check(game.screen=="chapters","returns to picker at chapter boundary")
+	for file in ResourceLoader.list_directory("res://art"):
+		if file.ends_with(".webp"): check(backgrounds.has(file),"artwork appears in a chapter: "+file)
 	check(Logbook.new().room==saved.room and Logbook.new().opened==saved.opened,"debug replays preserve earned story progress")
 	game.new_game()
 	var r:=Passage.new(Book.legacy_index(1))
