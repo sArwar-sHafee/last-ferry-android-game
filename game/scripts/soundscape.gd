@@ -9,7 +9,7 @@ var cursor := 0
 var ambience := ""
 var enabled := true
 var samples := {}
-const NAMES := ["estuary","pumphall","lantern","step","land","engage","splash","ratchet","glass","flow","crate","save","signal","homecoming","pursuit","undertow","bark"]
+const NAMES := ["estuary","pumphall","lantern","step","land","engage","splash","impact","ratchet","glass","flow","crate","save","signal","homecoming","pursuit","undertow","bark"]
 
 func _ready() -> void:
 	for key in NAMES:
@@ -66,7 +66,11 @@ func cue(key: String) -> void:
 	cursor = (cursor+1)%layers.size()
 	voice.stream = samples[key]
 	voice.pitch_scale = randf_range(.89,1.1) if key in ["step","land","ratchet","crate"] else 1.0
-	voice.volume_db = -11 if key=="step" else (-5 if key=="land" else 0)
+	match key:
+		"step": voice.volume_db=-11
+		"splash": voice.volume_db=-10
+		"land","impact": voice.volume_db=-5
+		_: voice.volume_db=0
 	voice.play()
 
 func tick(dt: float) -> void:

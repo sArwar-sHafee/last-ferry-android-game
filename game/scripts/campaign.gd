@@ -133,6 +133,24 @@ static func deck_height(index: int) -> float:
 	if index==CHAPTER_STARTS.back(): return -386
 	return DECK_HEIGHTS[district(index)][int(SOURCE_ROOMS[index])%ROOMS_PER_DISTRICT]
 
+# Scene addresses for the stretches with wider masonry gaps.
+const LONG_CAUSEWAY_SCENES := [8,17,20,34,37,42,91,99]
+const BOAR_RUN_APPROACHES := {
+	68:"ride loose", 69:"spillway ride", 70:"spider ride",
+	71:"ride loose spillway", 72:"ride spider"
+}
+# Authored revisions from the chapter editor. Keep checkpoint IDs in route order.
+const CHAPTER_ROUTE_REVISIONS := {
+	1:"ledge gap causeway short_wreck ledge @0a shore ledge gap @0b gap float ledge",
+	2:"drop shore tide causeway @1a broken_jetty @1b skiff ledge",
+	4:"float spillway gap shore gap @3a tide skiff shore @3b shore tide shore",
+	6:"crate steps tide causeway @4a shore @4b gantry gap",
+	7:"drop loose ledge skiff gap @5a balance shore hoist @5b gap float ledge",
+	8:"float spillway gap loose ledge @6a skiff loose wide_causeway @6b ledge shore drop",
+	9:"ledge gap causeway tide causeway @7a tide shore rocker @7b loose hound steps",
+	17:"crate steps shore tide wide_causeway @13a barge @13b hound gap loose",
+	22:"branches branches causeway branches @17a branches @17b hound branches crate drop",
+}
 static var ROOMS: Array = curate_rooms()
 
 static func curate_rooms() -> Array:
@@ -147,12 +165,19 @@ static func curate_rooms() -> Array:
 			["ride","ride","ride"],["steps drop","ledge steps","drop ledge"],
 			["ray shutters","ledge ray","shutters steps"],["storm_island gap","steps storm_island","loose storm_island"]]
 		if i>0:
-			var section:String=passages[region(i)][i%3]
+			var section:String=BOAR_RUN_APPROACHES.get(addr,passages[region(i)][i%3])
 			var lamp:=str(entry[1]).find(" @")
 			if lamp>=0:
 				if region(i)==6: lamp=str(entry[1]).find(" ",lamp+2)
 				if lamp<0: lamp=str(entry[1]).length()
 				entry[1]=str(entry[1]).insert(lamp," "+section)
+		if addr in LONG_CAUSEWAY_SCENES:
+			var sections:=str(entry[1]).split(" ")
+			var crossing:=sections.find("causeway")
+			if crossing>=0:
+				sections[crossing]="wide_causeway"
+				entry[1]=" ".join(sections)
+		if addr in CHAPTER_ROUTE_REVISIONS: entry[1]=CHAPTER_ROUTE_REVISIONS[addr]
 		rooms.append(entry)
 	return rooms
 

@@ -7,9 +7,12 @@ const HAND_REACH := 41.0
 const PULL_TIME := 0.52
 const GRAVITY := 990.0
 const RADIUS := 8.0
+const ROCKER_MAX_SLOPE := .68
+const ROCKER_GAP := 74.0
 const BODY := 40.0
 var room: int
 var rides: Array = []
+var boar_road := false
 var mounted := ""
 var active_ride := -1
 var platforms: Array = []
@@ -24,7 +27,7 @@ var ledge_face := 1
 var hang_time := 0.0
 var pull_time := -1.0
 var grab_lock := 0.0
-var transferring := -1
+var chamber_jump := false
 var near_valve := -1
 var valve_action := ""
 var completed: Array = []
@@ -62,6 +65,7 @@ func _init(index: int, cleared: Array = []) -> void:
 	checkpoint.y=_y
 	var exit_height:=Book.deck_height(index+1)
 	var tokens:=str(Book.ROOMS[index][1]).split(" ")
+	boar_road=tokens.has("ride")
 	dock(165)
 	for i in tokens.size():
 		if i==floori(tokens.size()*.45):
@@ -80,6 +84,9 @@ func _init(index: int, cleared: Array = []) -> void:
 	terrace_to(exit_height)
 	dock(170)
 	width = _x
+	if boar_road:
+		rides.append({"start":checkpoint.x,"end":width,"type":"ride","position":checkpoint,
+			"ground_y":checkpoint.y,"arrived":false})
 	spawn()
 
 func platform(x: float, y: float, length: float, style: String, delta := Vector2.ZERO, rate := 0.0) -> void:
@@ -139,22 +146,27 @@ func moving_decks(pattern: int, tidal: bool, span_count := 0) -> void:
 func build_section(token: String) -> void:
 	match token:
 		"walk": dock(145)
+		"shore": dock(195)
 		"loose": plank_run(room*7+section_number*3,4 if room==0 else 0)
 		"longwreck": plank_run(4,10)
+		"short_wreck": plank_run(room*7+section_number*3,3)
+		"broken_jetty": plank_run(4,7)
 		"single_float": moving_decks(2,false,1)
 		"flotilla": moving_decks(3,true,5)
 		"viaduct_walk": dock(218,"viaduct")
 		"float","tide": moving_decks(room*5+section_number*2,token=="tide")
-		"causeway","spillway":
+		"causeway","wide_causeway","spillway":
 			# A shallow stair of masonry islands with a broad middle landing.
 			dock(60)
 			var shape:Array=[0,17,27,12,-9] if token=="spillway" else [-12,-28,-41,-26]
+			var wide:=token=="wide_causeway"
+			var long_gaps:=[72,82,88,80]
 			for i in shape.size():
-				_x+=35+7*(i%3)
+				_x+=long_gaps[i] if wide else 35+7*(i%3)
 				var w:=108 if i==2 else 65+4*i
-				platform(_x,_y+float(shape[i]),w,"pier")
+				platform(_x,_y+float(shape[i]),w,"wide_pier" if wide else "pier")
 				_x+=w
-			_x+=32
+			_x+=76 if wide else 32
 			dock(95)
 		"aqueduct":
 			var bank:=_y
@@ -165,11 +177,13 @@ func build_section(token: String) -> void:
 			terrace_to(bank)
 		"rocker":
 			dock(74)
-			var pivot:=_x+132
-			devices.append({"type":"rocker","x":pivot,"y":_y,"tilt":0.0})
-			platform(_x+12,_y,240,"rocker")
+			_x+=ROCKER_GAP
+			var span:=174.0
+			var center_y:=_y-14.0
+			devices.append({"type":"rocker","x":_x+span*.5,"y":center_y,"tilt":0.0,"half_span":span*.5})
+			platform(_x,center_y,span,"rocker")
 			platforms.back().device=devices.size()-1
-			_x+=266
+			_x+=span+ROCKER_GAP
 			dock(103)
 		"gantry":
 			# A vertical cage rises to a landing well above normal jump reach.
@@ -200,7 +214,8 @@ func build_section(token: String) -> void:
 				_x+=43+(room+k)%4*6
 				dock(105+((room+k)%3)*13,"rail")
 			dock(90)
-			rides.append({"start":start+24,"end":_x-30,"type":token,"position":Vector2(start+24,_y),"ground_y":_y,"arrived":false})
+			if token=="trolley":
+				rides.append({"start":start+24,"end":_x-30,"type":token,"position":Vector2(start+24,_y),"ground_y":_y,"arrived":false})
 		"barge":
 			moving_decks(room,true,2+room%3)
 		"piston","wave":
@@ -261,7 +276,9 @@ func build_section(token: String) -> void:
 			dock(44)
 			var dist := 219.0 if token == "skiff" else 195.0
 			var rise := -42.0 if token == "hoist" else -9.0
-			platform(_x+4,_y+8,86,"hoist" if _y<310 else token,Vector2(dist,rise),0.76)
+			var style := "hoist" if _y<310 else token
+			var rate := 1.03 if style == "skiff" else .76
+			platform(_x+4,_y+8,86,style,Vector2(dist,rise),rate)
 			_x += dist + 94
 			_y += rise
 			dock(93)
@@ -322,13 +339,25 @@ func build_section(token: String) -> void:
 			_y -= 30
 			dock(180,"stone")
 
+func continue_boar(previous: RefCounted) -> void:
+	if not boar_road or not previous.boar_road: return
+	var boar:Dictionary=previous.rides[0]
+	boar.merge(rides[0],true)
+	rides[0]=boar
+	vel.x=previous.vel.x
+	stride=previous.stride
+	last_step=previous.last_step
+
 func spawn() -> void:
-	active_ride=-1
-	mounted=""
+	active_ride=0 if boar_road else -1
+	mounted="ride" if boar_road else ""
 	for ride in rides:
-		ride.arrived=checkpoint.x>=ride.end
-		ride.position=Vector2(ride.end if ride.arrived else ride.start,ride.ground_y)
-	transferring=-1
+		if boar_road:
+			ride.position=checkpoint
+		else:
+			ride.arrived=checkpoint.x>=ride.end
+			ride.position=Vector2(ride.end if ride.arrived else ride.start,ride.ground_y)
+	chamber_jump=false
 	pos = checkpoint
 	ledge=-1
 	pull_time=-1
@@ -382,8 +411,8 @@ func update_devices(dt: float) -> void:
 			"rocker":
 				var load:=0.0
 				if grounded>=0 and platforms[grounded].style=="rocker" and devices[platforms[grounded].device]==d:
-					load=clampf((pos.x-float(d.x))/100.0,-1,1)
-				d.tilt=move_toward(float(d.tilt),load*.25,dt*.48)
+					load=clampf((pos.x-float(d.x))/float(d.half_span),-1,1)
+				d.tilt=move_toward(float(d.tilt),load*ROCKER_MAX_SLOPE,dt*1.12)
 			"steam":
 				d.cycle=fposmod(time+float(d.phase),4.8)
 				var next_mode:=2 if float(d.cycle)>=3.35 else (1 if float(d.cycle)>=2.45 else 0)
@@ -397,8 +426,9 @@ func update_devices(dt: float) -> void:
 				d.mode=int(loaded)
 				d.amount=move_toward(float(d.amount),float(d.mode),dt*.85)
 			"lockpair":
-				d.first=move_toward(float(d.first),1.0 if int(d.mode)>0 else 0.0,dt*.53)
-				d.second=move_toward(float(d.second),1.0 if int(d.mode)==2 else 0.0,dt*.65)
+				var feeding_second:bool=d.mode==2
+				d.first=move_toward(float(d.first),1.0 if d.mode==1 else 0.0,dt*(.42 if feeding_second else .53))
+				d.second=move_toward(float(d.second),1.0 if feeding_second else 0.0,dt*.95)
 			"shutter":
 				d.amount=clampf((sin((time+float(d.offset))*1.22)+.24)*2.8,0,1)
 
@@ -438,17 +468,10 @@ func update_hound(d: Dictionary,dt: float) -> void:
 				d.facing=-1
 
 func operate_valve() -> bool:
-	# Touch and its emulated mouse click can arrive in the same physics frame.
-	if transferring>=0: return true
 	if near_valve<0 or death_timer>0: return false
 	var lock:Dictionary=devices[near_valve]
-	if valve_action=="Transfer to II":
-		lock.mode=2
-		transferring=grounded
-		vel=Vector2.ZERO
-		buffer=0
-	else:
-		lock.mode=1
+	lock.mode=2 if valve_action=="Transfer to II" else 1
+	# Clear the prompt immediately so an emulated click cannot use it again.
 	near_valve=-1
 	valve_action=""
 	events.append("flow")
@@ -480,9 +503,6 @@ func update_platforms() -> void:
 				weight = d.first if int(p.side)==0 else d.second
 			else: weight = d.amount
 		p.pos = Vector2(p.base) + Vector2(p.delta)*weight
-		if p.style=="chamber" and p.side==0:
-			# The rising second float draws the transfer pontoon alongside it.
-			p.pos.x+=devices[p.device].second*140
 
 func surface_height(p: Dictionary,x: float) -> float:
 	if p.style=="rocker":
@@ -510,11 +530,11 @@ func ledge_anchor() -> Vector2:
 	return Vector2(p.pos)+Vector2(float(p.w) if ledge_face<0 else 0.0,0)
 
 func catch_ledge(axis: float) -> void:
-	if is_grounded() or grab_lock>0 or absf(axis)<.15: return
+	if active_ride>=0 or is_grounded() or grab_lock>0 or absf(axis)<.15: return
 	var side:=1 if axis>0 else -1
 	for i in platforms.size():
 		var p:Dictionary=platforms[i]
-		if p.style not in ["stone","dock","rail","drain","viaduct","pier"]: continue
+		if p.style not in ["stone","dock","rail","drain","viaduct","pier","wide_pier"]: continue
 		var edge:=Vector2(p.pos)+Vector2(float(p.w) if side<0 else 0.0,0)
 		var reach:float=(edge.x-pos.x)*side
 		var below:=pos.y-edge.y
@@ -561,7 +581,7 @@ func climb_step(dt: float,axis: float,jump: bool) -> void:
 		events.append("step")
 
 func needs_console(index: int) -> bool:
-	return index==completed.size() and puzzle_wait<=0.0
+	return not boar_road and index==completed.size() and puzzle_wait<=0.0
 
 func vertical_view() -> float:
 	return minf(0.0,pos.y-272)
@@ -580,7 +600,7 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 		if death_timer <= 0:
 			spawn()
 		return
-	if active_ride<0:
+	if active_ride<0 and ledge<0:
 		for i in rides.size():
 			var vehicle:Dictionary=rides[i]
 			if not vehicle.arrived and pos.x>=vehicle.start and pos.x<vehicle.start+30 and absf(pos.y-float(vehicle.ground_y))<48:
@@ -594,18 +614,6 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 	update_devices(dt)
 	update_planks(dt)
 	update_platforms()
-	if transferring>=0:
-		var pontoon:Dictionary=platforms[transferring]
-		var lock:Dictionary=devices[pontoon.device]
-		pos+=Vector2(pontoon.pos)-Vector2(pontoon.old)
-		pos.x=move_toward(pos.x,pontoon.pos.x+pontoon.w*.5,dt*85)
-		pos.y=pontoon.pos.y
-		near_valve=-1
-		track_keeper(dt)
-		if float(lock.first)>=1 and float(lock.second)>=1:
-			grounded=transferring+1
-			transferring=-1
-		return
 	if ledge>=0:
 		climb_step(dt,axis,jump)
 		track_keeper(dt)
@@ -614,7 +622,11 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 		pos += Vector2(platforms[grounded].pos)-Vector2(platforms[grounded].old)
 	var old_x := pos.x
 	var old_y := pos.y
-	vel.x = move_toward(vel.x, axis*SPEED, dt*(1250 if is_grounded() else 760))
+	var slide_speed:=0.0
+	if grounded>=0 and platforms[grounded].style=="rocker":
+		var slope:=float(devices[platforms[grounded].device].tilt)
+		slide_speed=signf(slope)*maxf(0.0,absf(slope)-.24)*170.0
+	vel.x = move_toward(vel.x, axis*SPEED+slide_speed, dt*(1250 if is_grounded() else 760))
 	if absf(axis)>0.01:
 		face = 1 if axis>0 else -1
 	near_crate=false
@@ -634,7 +646,7 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 	pos.x = clampf(pos.x+vel.x*dt, RADIUS+1, width-25)
 	var dir := signi(roundi(signf(vel.x)))
 	for p in platforms:
-		if is_solid(p) and p.style in ["dock","rail","stone","drain","viaduct","pier"]:
+		if is_solid(p) and p.style in ["dock","rail","stone","drain","viaduct","pier","wide_pier"]:
 			collide_side(p.pos.x, p.pos.x+p.w, p.pos.y, old_x, dir)
 	for box in freight:
 		collide_side(box.x-21,box.x+21,box.y-45,old_x,dir)
@@ -685,6 +697,7 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 				pos.y = float(box.y)-45
 				vel.y = 0
 				grounded = -2
+	catch_ledge(axis)
 	if active_ride>=0:
 		var vehicle:Dictionary=rides[active_ride]
 		vehicle.position=pos
@@ -693,7 +706,6 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 			vehicle.arrived=true
 			active_ride=-1
 			mounted=""
-	catch_ledge(axis)
 	if not is_grounded(): held_crate=-1
 	if is_grounded():
 		grace = 0.11
@@ -710,6 +722,7 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 		grace = maxf(0,grace-dt)
 	near_valve=-1
 	valve_action=""
+	chamber_jump=false
 	var submerged := false
 	var struck := false
 	for i in devices.size():
@@ -722,18 +735,21 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 		if d.type=="shutter" and absf(pos.x-float(d.x))<14 and float(d.amount)<.54:
 			if old_x<float(d.x)-9: pos.x=float(d.x)-15
 			elif old_x>float(d.x)+9: pos.x=float(d.x)+15
-			else: submerged=true
+			else: struck=true
 		if d.type=="lockpair":
 			if pos.x>float(d.x)+34 and pos.x<float(d.x)+303 and pos.y>float(d.y)+84: submerged=true
 			if absf(pos.x-float(d.x))<42 and absf(pos.y-float(d.y))<40:
 				near_valve=i
 				valve_action="Fill chamber I"
 			elif grounded>=0 and platforms[grounded].style=="chamber" and platforms[grounded].device==i and platforms[grounded].side==0:
-				near_valve=i
-				valve_action="Transfer to II" if int(d.mode)!=2 else "Refill chamber I"
+				if d.mode==1:
+					near_valve=i
+					valve_action="Transfer to II"
+				elif d.mode==2:
+					chamber_jump=true
 	if pos.y > minf(496,camera_y+570) or submerged or struck:
 		death_timer = 0.68
-		events.append("engage" if struck else "splash")
+		events.append("splash" if not struck and grounded==-1 else "impact")
 		ledge=-1
 		return
 	near_station = -1

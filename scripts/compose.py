@@ -49,3 +49,12 @@ for beat,notes in [(0,(146.83,220)),(3,(164.81,246.94)),(6,(196,293.66)),(9,(220
     local=t-beat;env=np.where(local>=0,(1-np.exp(-np.maximum(local,0)*2))*np.exp(-np.maximum(local,0)*.42),0)
     for f in notes:a+=env*(tone(local,f)+.24*tone(local,f*2.003))*.09
 save("homecoming",a*np.minimum(1,(18-t)*2))
+
+# A muffled hit for contact deaths. It has a dry attack and a short body thump.
+t = timeline(.48)
+hit_rng = np.random.default_rng(106)
+body = sosfilt(butter(2, 530, fs=R, output="sos"), hit_rng.standard_normal(len(t)))
+body /= max(np.abs(body).max(), 1e-6)
+envelope = (1 - np.exp(-220*t))*np.exp(-17*t)
+hit = .61*body*envelope + .16*np.sin(2*np.pi*(89*t - 68*t*t))*envelope*np.exp(-14*t)
+save("impact", hit)

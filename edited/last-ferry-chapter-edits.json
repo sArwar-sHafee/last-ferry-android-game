@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "game": "The Last Ferry",
+  "source": "docs/chapter-contents.md",
+  "baselineSha256": "b3d7148e3e61e185cd1b6381483839d70246853f3ceff2b454a02b1375604a15",
+  "chapters": [
+    {
+      "chapter": 1,
+      "name": "The Landing",
+      "counts": [
+        {
+          "componentId": "harbor-hounds",
+          "component": "Harbor hounds",
+          "current": 1,
+          "target": 0
+        },
+        {
+          "componentId": "tilting-bridges",
+          "component": "Tilting bridges",
+          "current": 1,
+          "target": 0
+        },
+        {
+          "componentId": "skiffs",
+          "component": "Skiffs",
+          "current": 5,
+          "target": 3
+        },
+        {
+          "componentId": "breakable-planks",
+          "component": "Breakable planks",
+          "current": 19,
+          "target": 14
+        },
+        {
+          "componentId": "standard-causeways",
+          "component": "Standard causeways",
+          "current": 4,
+          "target": 2
+        }
+      ]
+    },
+    {
+      "chapter": 2,
+      "name": "The Tidal Quays",
+      "counts": [
+        {
+          "componentId": "harbor-hounds",
+          "component": "Harbor hounds",
+          "current": 2,
+          "target": 1
+        },
+        {
+          "componentId": "movable-crates",
+          "component": "Movable crates",
+          "current": 5,
+          "target": 3
+        }
+      ]
+    },
+    {
+      "chapter": 3,
+      "name": "The Customs Reach",
+      "counts": [
+        {
+          "componentId": "harbor-hounds",
+          "component": "Harbor hounds",
+          "current": 1,
+          "target": 2
+        },
+        {
+          "componentId": "skiffs",
+          "component": "Skiffs",
+          "current": 4,
+          "target": 1
+        }
+      ]
+    },
+    {
+      "chapter": 4,
+      "name": "Mangrove Canopy",
+      "counts": [
+        {
+          "componentId": "harbor-hounds",
+          "component": "Harbor hounds",
+          "current": 1,
+          "target": 2
+        }
+      ]
+    }
+  ]
+}

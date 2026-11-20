@@ -12,12 +12,18 @@ const EDGE := Color("#80908a")
 const BRASS := Color("#efc487")
 const PAPER := Color("#e9e6d3")
 const STORM_LIGHT := preload("res://scripts/storm_light.gdshader")
-const STRIKE_TIMES := [2.4, 7.9, 12.2, 19.6, 24.4, 31.0]
-const STORM_PERIOD := 38.7
+const STRIKE_DURATION := 2.6
+const STORM_DARK_MIN := 2.6
+const STORM_DARK_MAX := 7.4
+var storm_rng := RandomNumberGenerator.new()
+var storm_route: Passage
+var storm_began := -INF
+var next_strike := INF
+var lantern_position := Vector2.ZERO
+var wick_flutter := 0.0
 var storm_shade := ColorRect.new()
 var storm_material := ShaderMaterial.new()
 var sky_glow := GradientTexture2D.new()
-var strike_seed := -1
 var strike_bolt := PackedVector2Array()
 var strike_branches: Array[PackedVector2Array] = []
 var route: Passage
@@ -28,6 +34,7 @@ var finale_lit := false
 var arrival := 0.0
 
 func _ready() -> void:
+	storm_rng.randomize()
 	storm_material.shader=STORM_LIGHT
 	storm_shade.material=storm_material
 	storm_shade.size=Vector2(960,540)
@@ -67,8 +74,14 @@ func _draw() -> void:
 	if playing:
 		sky=Book.CHAPTERS[chapter_index][2]
 	draw_texture_rect(sky,sky_rect,false)
+	var sky_flash:=0.0
 	storm_shade.visible=chapter_index==Book.CHAPTERS.size()-1
-	if storm_shade.visible: draw_storm(cam)
+	if storm_shade.visible:
+		var clock:=route.elapsed
+		wick_flutter=.54*sin(clock*7.1)+.31*sin(clock*13.7+.8)+.15*sin(clock*23.3)
+		sky_flash=draw_storm()
+	else:
+		storm_route=null
 	if playing:
 		draw_weather(cam,chapter)
 		draw_waterfront(cam,chapter)
@@ -84,6 +97,9 @@ func _draw() -> void:
 			if chapter in [0,2,5]:
 				line(Vector2(x,323),Vector2(x+4,474),Color(.15,.21,.22,.45),5)
 				line(Vector2(x,356),Vector2(x+69,431),Color(.16,.22,.22,.38),3)
+		if storm_shade.visible:
+			# The distant harbor catches lightning. Only nearby surfaces catch the wick light.
+			draw_rect(Rect2(0,route.camera_y,960,540),Color(.035,.055,.085,.82*(1.0-sky_flash)))
 		for s in route.structures:
 			var x:float = s.x-cam
 			if x < -220 or x>1000: continue
@@ -137,6 +153,10 @@ func _draw() -> void:
 				draw_hauling_keeper(cam)
 			else:
 				draw_keeper(route.pos-Vector2(cam,0),route.face,route.stride,route.is_grounded(),route.vel.x)
+		if storm_shade.visible:
+			storm_material.set_shader_parameter("lantern",lantern_position-Vector2(0,route.camera_y))
+			storm_material.set_shader_parameter("outward",signf(lantern_position.x-(route.pos.x-cam)))
+			storm_material.set_shader_parameter("flame",1.0+wick_flutter*.085 if route.death_timer<=.1 else 0.0)
 		water(cam)
 	elif mode == "ending":
 		var p := Vector2(155,219)
@@ -164,39 +184,44 @@ func _draw() -> void:
 			line(Vector2(x,y),Vector2(x+20+j%12,y),Color(.82,.85,.77,.11),1)
 	atmosphere(cam)
 
-func draw_storm(cam: float) -> void:
-	var phase:=fposmod(route.time,STORM_PERIOD)
-	var strike:=STRIKE_TIMES.bsearch(phase,false)-1
+func storm_seconds() -> float:
+	if storm_route!=route:
+		storm_route=route
+		storm_began=-INF
+		next_strike=route.elapsed+storm_rng.randf_range(1.6,4.1)
+	if route.elapsed>=next_strike:
+		storm_began=route.elapsed
+		next_strike=storm_began+STRIKE_DURATION+storm_rng.randf_range(STORM_DARK_MIN,STORM_DARK_MAX)
+		build_lightning(storm_rng.randi())
+	return route.elapsed-storm_began
+
+func draw_storm() -> float:
+	var since:=storm_seconds()
 	var flash:=0.0
-	if strike>=0:
-		var since:=phase-float(STRIKE_TIMES[strike])
-		if since<1.4:
-			# Two return strokes share the same channel. Diffuse cloud light lingers
-			# after each short, bright pulse.
-			var first:=lightning_pulse(since,.036,.088)
-			var second:=.71*lightning_pulse(since-.28,.025,.072)
-			var scatter:=.23*lightning_pulse(since,.055,.31)
-			flash=clampf(first+second+scatter,0,1)
-			var seed_value:=1+route.room*103+floori(route.time/STORM_PERIOD)*17+strike
-			if strike_seed!=seed_value: build_lightning(seed_value)
-			var sky_origin:=Vector2(0,route.camera_y)
-			var cloud:=sky_origin+strike_bolt[0].lerp(strike_bolt[4],.55)
-			draw_texture_rect(sky_glow,Rect2(cloud-Vector2(290,118),Vector2(580,236)),
-				false,Color(1,1,1,flash))
-			var bolt_light:=clampf(first+second,0,1)
-			draw_set_transform(sky_origin)
-			draw_lightning_line(strike_bolt,bolt_light,1.0)
-			for branch in strike_branches: draw_lightning_line(branch,bolt_light*.77,.57)
-			draw_set_transform(Vector2.ZERO)
+	if since<STRIKE_DURATION:
+		# Two return strokes, followed by longer diffuse light behind the clouds.
+		var first:=lightning_pulse(since,.036,.105)
+		var second:=.68*lightning_pulse(since-.34,.025,.092)
+		var scatter:=.69*lightning_pulse(since,.12,1.02)
+		scatter*=1.0-smoothstep(1.75,STRIKE_DURATION,since)
+		flash=clampf(first+second+scatter,0,1)
+		var sky_origin:=Vector2(0,route.camera_y)
+		var cloud:=sky_origin+strike_bolt[0].lerp(strike_bolt[4],.55)
+		draw_texture_rect(sky_glow,Rect2(cloud-Vector2(290,118),Vector2(580,236)),
+			false,Color(1,1,1,flash))
+		var bolt_light:=clampf(first+second,0,1)
+		draw_set_transform(sky_origin)
+		draw_lightning_line(strike_bolt,bolt_light,1.0)
+		for branch in strike_branches: draw_lightning_line(branch,bolt_light*.77,.57)
+		draw_set_transform(Vector2.ZERO)
 	storm_shade.position.y=route.camera_y
 	storm_material.set_shader_parameter("flash",flash)
-	storm_material.set_shader_parameter("lantern",route.pos-Vector2(cam-float(route.face)*10,route.camera_y+21))
+	return flash
 
 func lightning_pulse(seconds: float, attack: float, decay: float) -> float:
 	return smoothstep(0,attack,seconds)*exp(-maxf(0,seconds-attack)/decay)
 
 func build_lightning(seed_value: int) -> void:
-	strike_seed=seed_value
 	var rng:=RandomNumberGenerator.new()
 	rng.seed=seed_value
 	strike_bolt.clear()
@@ -331,11 +356,11 @@ func draw_platform(p: Dictionary,cam: float) -> void:
 			line(Vector2(end,9),Vector2(end-3,24+shake),Color("#8c8169"),2)
 		draw_set_transform(Vector2.ZERO,0,Vector2.ONE)
 		return
-	if style in ["pier","viaduct"]:
+	if style in ["pier","wide_pier","viaduct"]:
 		# Battered cutwaters below the spillway and braced trestles above it.
 		draw_rect(Rect2(x,y,w,11),DARK)
-		line(Vector2(x,y+1),Vector2(x+w,y+1),PAPER,2)
-		if style=="pier":
+		line(Vector2(x,y+1),Vector2(x+w,y+1),BRASS if style=="wide_pier" else PAPER,2)
+		if style in ["pier","wide_pier"]:
 			poly([Vector2(x+6,y+11),Vector2(x+w-6,y+11),Vector2(x+w-13,518),Vector2(x+14,518)],INK)
 			for j in 3: line(Vector2(x+6,y+19+j*19),Vector2(x+w-7,y+19+j*19),DARK,2)
 		else:
@@ -523,12 +548,23 @@ func draw_keeper(at: Vector2,facing: int,phase: float,on_ground: bool,speed: flo
 	var hand := Vector2(13+swing*1.8,-22)
 	line(Vector2(3,-31),Vector2(7,-24),INK,3.5)
 	line(Vector2(7,-24),hand,INK,3)
-	var light := hand+Vector2(0,7)
+	var light:=hand+Vector2(0,7)
+	lantern_position=at+Vector2(facing*light.x,light.y-bob)
 	line(hand,light,INK,2)
-	glow(light,29,1.0)
-	draw_rect(Rect2(light-Vector2(3,4),Vector2(6,8)),INK)
-	draw_rect(Rect2(light-Vector2(2,2),Vector2(4,5)),Color("#ffd291"))
+	if storm_shade.visible:
+		draw_wick_lamp(light)
+	else:
+		glow(light,29,1.0)
+		draw_rect(Rect2(light-Vector2(3,4),Vector2(6,8)),INK)
+		draw_rect(Rect2(light-Vector2(2,2),Vector2(4,5)),Color("#ffd291"))
 	draw_set_transform(Vector2.ZERO,0,Vector2.ONE)
+
+func draw_wick_lamp(p: Vector2) -> void:
+	draw_rect(Rect2(p-Vector2(3,4),Vector2(6,8)),INK)
+	draw_rect(Rect2(p-Vector2(2,3),Vector2(4,6)),Color("#986039"))
+	var tip:=p+Vector2(.65*wick_flutter,-2.2-.7*wick_flutter)
+	poly([tip,p+Vector2(1.5,.3),p+Vector2(.7,1.8),p+Vector2(-1,1.8),p+Vector2(-1.4,.5)],Color("#ffbb5b"))
+	draw_circle(p+Vector2(0,.7),.9,Color("#fff3cb"),true,-1,true)
 
 func draw_hauling_keeper(cam: float) -> void:
 	var crate:Dictionary=route.freight[route.held_crate]
@@ -559,8 +595,12 @@ func draw_hauling_keeper(cam: float) -> void:
 		line(elbow,palm,DARK if i==0 else INK,3)
 		line(palm,palm+Vector2(1,3),EDGE,2)
 	var lamp:=hip+Vector2(-7,6)
-	glow(lamp,17,.7)
-	draw_rect(Rect2(lamp-Vector2(2,3),Vector2(4,6)),BRASS)
+	lantern_position=route.pos-Vector2(cam,0)+Vector2(route.face*lamp.x,lamp.y)
+	if storm_shade.visible:
+		draw_wick_lamp(lamp)
+	else:
+		glow(lamp,17,.7)
+		draw_rect(Rect2(lamp-Vector2(2,3),Vector2(4,6)),BRASS)
 	draw_set_transform(Vector2.ZERO,0,Vector2.ONE)
 
 func draw_ferry(p: Vector2) -> void:
@@ -644,7 +684,6 @@ func draw_device(d: Dictionary,cam: float) -> void:
 			poly([p+Vector2(-20,55),p+Vector2(0,7),p+Vector2(20,55)],INK)
 			draw_circle(p+Vector2(0,7),7,DARK)
 			draw_circle(p+Vector2(0,7),3,BRASS)
-			line(p+Vector2(-103,-104*float(d.tilt)+9),p+Vector2(103,104*float(d.tilt)+9),DARK,4)
 		"steam":
 			if d.get("skin","")=="piston":
 				var stroke:=1.0 if d.mode==2 else smoothstep(2.5,3.35,float(d.cycle))*.28
@@ -772,8 +811,12 @@ func draw_climber(cam: float) -> void:
 	line(elbow,hand,INK,3)
 	line(hand,hand+Vector2(5,0),PAPER,2)
 	var lamp:=hip+Vector2(-7,5)
-	glow(lamp,18,.7)
-	draw_rect(Rect2(lamp-Vector2(2,3),Vector2(4,6)),BRASS)
+	lantern_position=foot+Vector2(side*lamp.x,lamp.y)
+	if storm_shade.visible:
+		draw_wick_lamp(lamp)
+	else:
+		glow(lamp,18,.7)
+		draw_rect(Rect2(lamp-Vector2(2,3),Vector2(4,6)),BRASS)
 	draw_set_transform(Vector2.ZERO,0,Vector2.ONE)
 
 func draw_mount(foot: Vector2,kind: String,phase: float) -> void:

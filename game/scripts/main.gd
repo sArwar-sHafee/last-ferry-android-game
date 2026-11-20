@@ -32,6 +32,7 @@ var arrival := 0.0
 var horn_count := 0
 var ready_game := false
 var last_system_back := -1000
+var last_skip_frame := -1
 var replay_time := 0.0
 var chapter_page := 0
 const CHAPTERS_PER_PAGE := 9
@@ -42,6 +43,7 @@ var workshop_return := "menu"
 func _ready() -> void:
 	add_child(scenery)
 	add_child(hud)
+	hud.scene_skip_enabled=ProjectSettings.get_setting("ferry/testing/scene_skip",false)
 	hud.touch_device=OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
 	add_child(audio)
 	board_specs = JSON.parse_string(FileAccess.get_file_as_string("res://art/schematics.json"))
@@ -172,6 +174,8 @@ func enter_room(index: int, cleared: Array) -> void:
 			known.append(key)
 	var prior:=route
 	route = Passage.new(index,known)
+	var continuing_ride:=prior!=null and prior.finish and index==prior.room+1 and route.boar_road and prior.boar_road
+	if continuing_ride: route.continue_boar(prior)
 	if replay:
 		route.puzzle_wait=prior.puzzle_wait if prior else 0.0
 		route.puzzle_turn=prior.puzzle_turn if prior else Book.chapter(index)
@@ -182,7 +186,7 @@ func enter_room(index: int, cleared: Array) -> void:
 	hud.route = route
 	hud.replay = replay
 	hud.notice = Book.arrival_text(index)
-	hud.fade=.40
+	hud.fade=0.0 if continuing_ride else .40
 	hud.intro = 5.5 if not hud.notice.is_empty() else 0.0
 	audio.surround(Book.CHAPTERS[Book.chapter(index)][3])
 	audio.play_story(hud.intro)
@@ -419,6 +423,20 @@ func room_finished() -> void:
 	else:
 		enter_room(route.room+1,[])
 
+func debug_skip_scene() -> void:
+	if not hud.scene_skip_enabled or screen!="play" or route==null: return
+	# Touch and mouse emulation can deliver two presses in the same frame.
+	var frame:=Engine.get_process_frames()
+	if frame==last_skip_frame: return
+	last_skip_frame=frame
+	if not replay:
+		replay=true
+		replay_time=0.0
+	if route.room+1<Book.ROOMS.size():
+		enter_room(route.room+1,[])
+	else:
+		room_finished()
+
 func aim_ui() -> void:
 	hud.label(hud,Rect2(51,393,570,55),"Sweep the light onto the ferry, then sound the horn.",ThemeDB.fallback_font,18,hud.PAPER,true)
 	hud.button(hud,Rect2(51,456,82,47),"Left",func(): aim=clampf(aim-.045,0,1))
@@ -495,6 +513,9 @@ func _input(event: InputEvent) -> void:
 					key_grip=true
 					use_nearby()
 				if event.keycode==KEY_P: pause_game()
+				if event.keycode==KEY_R:
+					debug_skip_scene()
+					get_viewport().set_input_as_handled()
 			elif screen=="aim" and event.keycode in [KEY_E,KEY_ENTER,KEY_SPACE]:
 				signal_ferry()
 				get_viewport().set_input_as_handled()
@@ -528,6 +549,7 @@ func trigger_zone(key: String) -> void:
 		"jump": jump_request=true
 		"use": use_nearby()
 		"pause": pause_game()
+		"skip_scene": debug_skip_scene()
 
 func _physics_process(dt: float) -> void:
 	if screen!="play": return

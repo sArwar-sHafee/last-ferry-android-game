@@ -104,17 +104,28 @@ func run() -> void:
 		game.hud.fade=0
 		game.hud.button_scale=1
 		await capture("low-water" if index==25 else "upper-tower")
-	for shot in [["canopy",21,.46],["boar",68,.18],["cave",94,.50],["lightning",144,.30],["storm-afterglow",144,.30],["storm-dark",144,.30]]:
+	for shot in [["canopy",21,.46],["boar",68,.18],["cave",94,.50],["lightning",144,.30],["storm-afterglow",144,.30],["storm-dark",144,.30],["storm-dark-left",144,.30],["storm-walk-a",144,.30],["storm-walk-b",144,.30]]:
 		game.enter_room(game.Book.migrated_room(shot[1]),[])
 		r=game.route
 		var target:float=r.width*shot[2]
-		for deck in r.platforms:
+		for index in r.platforms.size():
+			var deck:Dictionary=r.platforms[index]
 			if deck.pos.x<target: continue
 			r.pos=deck.pos+Vector2(deck.w*.5,0)
+			r.grounded=index
 			break
 		r.camera=clampf(r.pos.x-385,0,maxf(0,r.width-960))
 		r.camera_y=r.vertical_view()
-		r.time={"lightning":2.45,"storm-afterglow":2.94,"storm-dark":3.85}.get(shot[0],.3)
+		if shot[0]=="lightning" or shot[0].begins_with("storm-"):
+			game.scenery.storm_route=r
+			game.scenery.storm_began=0.0
+			game.scenery.next_strike=10.0
+			game.scenery.build_lightning(144)
+			r.elapsed={"lightning":.05,"storm-afterglow":1.4}.get(shot[0],3.2)
+			r.face=-1 if shot[0]=="storm-dark-left" else 1
+			if shot[0].begins_with("storm-walk-"):
+				r.vel.x=r.SPEED
+				r.stride=1.15 if shot[0]=="storm-walk-a" else 4.22
 		for ride in r.rides:
 			if r.pos.x>=ride.start and r.pos.x<ride.end:
 				r.mounted=ride.type

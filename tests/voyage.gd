@@ -108,7 +108,7 @@ func pilot(r: Passage) -> Array:
 	var edge:float=p.pos.x+p.w
 	var lead:float=edge-r.pos.x
 	var gap:float=nxt.pos.x-edge
-	var jump_lead:=9.0 if gap>=100 else 19.0
+	var jump_lead:=9.0 if gap>=80 else 19.0
 	if gap>6 and lead<jump_lead:
 		# Wait for traveling ferries and lifting hooks before stepping off.
 		if gap>50 and (p.delta.x!=0 or nxt.delta.x!=0):
@@ -136,7 +136,7 @@ func run_room(index: int) -> void:
 			if not check(r.completed.has(key),"station completion "+key): break
 		var cmd := pilot(r)
 		r.step(dt,cmd[0],cmd[1],cmd[2])
-		if "splash" in r.events: deaths+=1
+		if "splash" in r.events or "impact" in r.events: deaths+=1
 		r.events.clear()
 		if r.finish:
 			print("ROUTE %02d  %s  %.1fs, %d recoveries" % [index+1,Book.ROOMS[index][0],r.elapsed,deaths])
@@ -412,6 +412,101 @@ func update_checks() -> void:
 	game.new_game()
 	landing=-1
 
+func hazard_and_storm_checks() -> void:
+	var fall:=Passage.new(0)
+	fall.pos.y=550
+	fall.step(1.0/60,0,false,false)
+	check("splash" in fall.events and not "impact" in fall.events,"a fall plays the water splash only")
+	var encounter:=Passage.new(Book.legacy_index(1),["s2"])
+	for device:Dictionary in encounter.devices:
+		if device.type!="hound": continue
+		device.mode=2
+		encounter.pos=Vector2(device.dog,device.y)
+		encounter.step(1.0/60,0,false,false)
+		check("impact" in encounter.events and not "splash" in encounter.events,"hound contact plays the dry impact only")
+		break
+	game.audio.set_enabled(true)
+	var splash_voice:AudioStreamPlayer=game.audio.layers[game.audio.cursor]
+	game.audio.cue("splash")
+	check(splash_voice.volume_db==-10,"the water death cue is quieter")
+	game.audio.set_enabled(false)
+
+	var skiffs:=0
+	var hoists:=0
+	for index in Book.ROOMS.size():
+		for platform:Dictionary in Passage.new(index).platforms:
+			if platform.style=="skiff":
+				skiffs+=1
+				check(is_equal_approx(platform.rate,1.03),"skiff has the faster crossing rate")
+			elif platform.style=="hoist":
+				hoists+=1
+				check(is_equal_approx(platform.rate,.76),"freight hoist retains its crossing rate")
+	check(skiffs>0 and hoists>0,"skiff and hoist rates are both exercised")
+
+	var scene_index:int=Book.CHAPTER_STARTS[10]
+	var last_index:int=Book.CHAPTER_STARTS[11]
+	var boar_tokens:=[]
+	for index in range(scene_index,last_index):
+		var boar_scene:=Passage.new(index)
+		check(boar_scene.boar_road and boar_scene.rides.size()==1,"one boar on the harder road")
+		boar_tokens.append_array(str(Book.ROOMS[index][1]).split(" "))
+	check(boar_tokens.count("spider")==2 and boar_tokens.count("loose")==2 and boar_tokens.count("spillway")==2,
+		"Boar Run includes two of each new obstacle")
+
+	var scenery:=game.scenery
+	scenery.route=Passage.new(Book.CHAPTER_STARTS[20])
+	scenery.storm_rng.seed=1193
+	scenery.storm_seconds()
+	var dark_intervals:={}
+	for i in 12:
+		scenery.route.elapsed=scenery.next_strike
+		check(scenery.storm_seconds()==0,"a scheduled lightning strike starts")
+		var dark:float=scenery.next_strike-scenery.storm_began-scenery.STRIKE_DURATION
+		check(dark>=2.59 and dark<=7.41,"lightning has a bounded random dark interval")
+		dark_intervals[roundi(dark*10)]=true
+		scenery.route.elapsed+=1.8
+		check(scenery.storm_seconds()<scenery.STRIKE_DURATION,"the longer afterglow lasts beyond the old cutoff")
+	check(dark_intervals.size()>6,"dark intervals vary instead of repeating a fixed cycle")
+	scenery.route=game.route
+	scenery.storm_route=null
+
+func bridge_checks() -> void:
+	var standard_count:=0
+	var wide_count:=0
+	var bridge_count:=0
+	for room in Book.ROOMS.size():
+		var tokens:=str(Book.ROOMS[room][1]).split(" ")
+		standard_count+=tokens.count("causeway")
+		wide_count+=tokens.count("wide_causeway")
+		var layout:=Passage.new(room)
+		for i in range(1,layout.platforms.size()-1):
+			var bridge:Dictionary=layout.platforms[i]
+			if bridge.style=="wide_pier" and layout.platforms[i+1].style=="wide_pier":
+				var gap:float=layout.platforms[i+1].pos.x-bridge.pos.x-bridge.w
+				check(gap>=72 and gap<=88,"wide causeway places long gaps in room "+str(room))
+			if bridge.style!="rocker": continue
+			bridge_count+=1
+			var left:Dictionary=layout.platforms[i-1]
+			var right:Dictionary=layout.platforms[i+1]
+			check(bridge.pos.x-left.pos.x-left.w==74 and right.pos.x-bridge.pos.x-bridge.w==74,
+				"tilting bridge has gaps on both sides in room "+str(room))
+			for direction in [-1,1]:
+				var keys:=layout.stations.map(func(station): return station.key)
+				var ride:=Passage.new(room,keys)
+				var beam:Dictionary=ride.platforms[i]
+				var device:Dictionary=ride.devices[beam.device]
+				ride.pos=beam.pos+Vector2(beam.w*(.5+direction*.30),0)
+				ride.grounded=i
+				var start:=ride.pos.x
+				for frame in 60: ride.step(1.0/60,0,false,false)
+				check(device.tilt*direction>.35 and (ride.pos.x-start)*direction>15,
+					"unbraced keeper slides down the steep bridge in room "+str(room))
+				for frame in 160:
+					ride.step(1.0/60,0,false,false)
+					if ride.death_timer>0: break
+				check(ride.death_timer>0,"keeper falls without jumping off the bridge in room "+str(room))
+	check(bridge_count==13 and standard_count==9 and wide_count==8,"both causeway variants and all tilting bridges are placed")
+
 func terrain_checks() -> void:
 	var locks:=0
 	var planks:Dictionary={}
@@ -438,7 +533,7 @@ func terrain_checks() -> void:
 				lifts[lift_length]=true
 				lift_length=0
 	check(locks==7,"manual lock transfers are distributed over seven locations")
-	check(planks.has(4) and planks.has(10) and planks.size()>=6,"distinct short and long plank runs")
+	check(planks.has(3) and planks.has(4) and planks.has(8) and planks.size()>=6,"distinct short and long plank runs")
 	check(lifts.has(1) and lifts.has(2) and lifts.has(5),"single pontoons and longer moving crossings")
 	check(lowest-highest>650,"surveyed campaign includes waterfront and upper galleries")
 	print("Terrain: %d manual locks, plank runs %s, moving deck runs %s." % [locks,planks.keys(),lifts.keys()])
@@ -467,29 +562,63 @@ func terrain_checks() -> void:
 		break
 
 func vehicle_checks() -> void:
-	for source in [61,68]:
-		game.enter_room(Book.migrated_room(source),[])
-		var r:=game.route
-		var vehicle:Dictionary=r.rides[0]
-		var height:=float(vehicle.ground_y)
-		r.pos=Vector2(vehicle.start-10,height)
-		r.step(1.0/60,0,false,false)
-		check(r.active_ride==-1 and vehicle.position==Vector2(vehicle.start,height),"ride waits at its boarding point")
-		r.pos.x=vehicle.start
-		r.step(1.0/60,0,false,false)
-		check(r.active_ride==0 and vehicle.position==r.pos,"boarding moves the existing ride")
-		game.pause_game()
-		var stopped:Vector2=vehicle.position
-		game._physics_process(.5)
-		check(game.scenery.mode=="play" and vehicle.position==stopped and r.active_ride==0,"pause keeps the mounted ride in the world")
-		game.set_screen("play")
-		r.pos=Vector2(vehicle.end-1,height)
-		r.vel.x=r.SPEED
-		r.step(1.0/60,1,false,false)
-		for frame in 10: r.step(1.0/60,1,false,false)
-		check(r.active_ride==-1 and vehicle.arrived and vehicle.position==Vector2(vehicle.end,height),"dismount leaves the ride at the terminus")
+	game.enter_room(Book.migrated_room(61),[])
+	var r:=game.route
+	var vehicle:Dictionary=r.rides[0]
+	var height:=float(vehicle.ground_y)
+	r.pos=Vector2(vehicle.start-10,height)
+	r.step(1.0/60,0,false,false)
+	check(r.active_ride==-1 and vehicle.position==Vector2(vehicle.start,height),"ride waits at its boarding point")
+	r.pos.x=vehicle.start
+	r.step(1.0/60,0,false,false)
+	check(r.active_ride==0 and vehicle.position==r.pos,"boarding moves the existing ride")
+	game.pause_game()
+	var stopped:Vector2=vehicle.position
+	game._physics_process(.5)
+	check(game.scenery.mode=="play" and vehicle.position==stopped and r.active_ride==0,"pause keeps the mounted ride in the world")
+	game.set_screen("play")
+	r.pos=Vector2(vehicle.end-1,height)
+	r.vel.x=r.SPEED
+	r.step(1.0/60,1,false,false)
+	for frame in 10: r.step(1.0/60,1,false,false)
+	check(r.active_ride==-1 and vehicle.arrived and vehicle.position==Vector2(vehicle.end,height),"dismount leaves the ride at the terminus")
 
-func stationary_transfer_check() -> void:
+	# A normal approach can grab the block, but the same pose on either ride cannot.
+	for source in [61,68]:
+		var layout:=Passage.new(Book.migrated_room(source))
+		var ride:Dictionary=layout.rides[0]
+		var deck:Dictionary=layout.platforms[0]
+		layout.pos=deck.pos+Vector2(-8,24)
+		layout.grounded=-1
+		layout.active_ride=0
+		layout.mounted=ride.type
+		layout.catch_ledge(1)
+		check(layout.ledge<0,"ledge grab is disabled while mounted on "+str(ride.type))
+		layout.active_ride=-1
+		layout.mounted=""
+		layout.catch_ledge(1)
+		check(layout.ledge==0,"ledge grab still works on foot")
+
+	var opening:=Book.migrated_room(68)
+	game.enter_room(opening,[])
+	var road:=game.route
+	var boar:Dictionary=road.rides[0]
+	check(road.rides.size()==1 and road.active_ride==0,"boar road starts with one mounted boar")
+	var station:Dictionary=road.stations[0]
+	road.puzzle_wait=0
+	road.pos=Vector2(station.x,station.y)
+	road.step(1.0/60,0,false,false)
+	check(road.active_ride==0 and road.near_station<0 and road.completed.size()==1,
+		"boar checkpoint advances without a dismount or puzzle")
+	road.spawn()
+	check(road.active_ride==0 and road.pos==road.checkpoint and is_same(boar,road.rides[0]),"checkpoint recovery keeps the boar")
+	road.finish=true
+	road.vel.x=150
+	game.room_finished()
+	check(game.route.room==opening+1 and game.route.active_ride==0 and is_same(boar,game.route.rides[0]) and game.route.vel.x==150,
+		"the same boar carries its momentum into the next scene")
+
+func chamber_transfer_checks() -> void:
 	var hand:Vector2=game.hud.zones().use
 	for room in Book.ROOMS.size():
 		var layout:=Passage.new(room)
@@ -500,26 +629,59 @@ func stationary_transfer_check() -> void:
 			for fill in [0.72,1.0]:
 				game.enter_room(room,cleared)
 				var r:=game.route
-				var pontoon:Dictionary=r.platforms[i]
-				var lock:Dictionary=r.devices[pontoon.device]
+				var first:Dictionary=r.platforms[i]
+				var second:Dictionary=r.platforms[i+1]
+				var lock:Dictionary=r.devices[first.device]
 				lock.mode=1
 				lock.first=fill
 				r.update_platforms()
-				r.pos=pontoon.pos+Vector2(pontoon.w*.84,0)
+				r.pos=first.pos+Vector2(first.w*.84,0)
 				r.grounded=i
 				r.step(1.0/60,0,false,false)
 				check(r.valve_action=="Transfer to II","chamber I offers transfer in room "+str(room))
-				# Touch and its emulated click can arrive before the next physics tick.
+				var start_x:=r.pos.x
+				var first_before:Vector2=first.pos
+				var second_before:Vector2=second.pos
 				for press in 2:
 					touch(press,hand,true)
 					touch(press,hand,false)
-				for frame in 105: r.step(1.0/60,0,false,false)
-				check(lock.mode==2 and r.transferring<0 and r.grounded==i+1 and r.death_timer==0,
-					"duplicate presses still complete the transfer in room "+str(room))
-				var landing_x:=r.pos.x
+				for frame in 18: r.step(1.0/60,0,false,false)
+				check(lock.mode==2 and r.grounded==i and is_equal_approx(r.pos.x,start_x)
+					and first.pos.x==first_before.x and first.pos.y>first_before.y
+					and second.pos.x==second_before.x and second.pos.y<second_before.y and r.chamber_jump,
+					"the two floats move vertically without carrying the keeper sideways in room "+str(room))
 				r.step(1.0/60,1,true,false)
-				for frame in 13: r.step(1.0/60,1,false,false)
-				check(r.pos.x>landing_x+10 and r.death_timer==0,"movement resumes after transfer in room "+str(room))
+				check(r.grounded<0,"keeper jumps off chamber I in room "+str(room))
+				for frame in 65:
+					r.step(1.0/60,1,false,false)
+					if r.grounded==i+1 or r.death_timer>0: break
+				check(r.grounded==i+1 and r.death_timer==0,"jump lands on the rising second float in room "+str(room))
+
+func debug_skip_checks() -> void:
+	var last_in_chapter:int=Book.CHAPTER_STARTS[1]-1
+	game.enter_room(last_in_chapter,[])
+	var saved:=Logbook.new()
+	var key:=InputEventKey.new()
+	key.keycode=KEY_R
+	key.pressed=true
+	game._input(key)
+	check(game.screen=="play" and game.route.room==last_in_chapter+1 and game.replay,
+		"R opens the next scene across a chapter boundary")
+	var skip_button:=game.hud.SKIP_SCENE_RECT.get_center()
+	touch(0,skip_button,true)
+	touch(0,skip_button,false)
+	check(game.route.room==last_in_chapter+1,"a repeated skip input in the same frame is ignored")
+	game.last_skip_frame=-1
+	touch(0,skip_button,true)
+	touch(0,skip_button,false)
+	check(game.route.room==last_in_chapter+2,"on-screen R advances the scene")
+	var after:=Logbook.new()
+	check(after.room==saved.room and after.cleared==saved.cleared and after.opened==saved.opened,
+		"debug skips leave the main voyage save intact")
+	game.last_skip_frame=-1
+	game.enter_room(Book.ROOMS.size()-1,[])
+	game._input(key)
+	check(game.screen=="aim","skipping the last scene opens the final beacon")
 
 func debug_chapter_checks() -> void:
 	check(Book.CHAPTERS.size()==21 and Book.CHAPTER_STARTS.back()==Book.ROOMS.size(),"21 chapters cover every scene")
@@ -575,9 +737,12 @@ func run() -> void:
 	checkpoint_checks()
 	boards=game.board_specs
 	update_checks()
+	hazard_and_storm_checks()
+	bridge_checks()
 	terrain_checks()
 	vehicle_checks()
-	stationary_transfer_check()
+	chamber_transfer_checks()
+	debug_skip_checks()
 	debug_chapter_checks()
 	for index in Book.ROOMS.size():
 		run_room(index)

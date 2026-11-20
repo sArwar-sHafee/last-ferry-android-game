@@ -12,6 +12,8 @@ var actions: Array = []
 var touched: Array = []
 var touch_device := false
 var button_scale := 1.0
+const SKIP_SCENE_RECT := Rect2(822,14,45,43)
+var scene_skip_enabled := false
 var replay := false
 var title_gradient: GradientTexture2D
 var header_gradient: GradientTexture2D
@@ -37,6 +39,7 @@ func zones() -> Dictionary:
 		"use":Vector2(960-34-139*button_scale,y),"jump":Vector2(960-34-44*button_scale,y-13*button_scale)}
 
 func zone_at(p: Vector2) -> String:
+	if scene_skip_enabled and SKIP_SCENE_RECT.has_point(p): return "skip_scene"
 	for key in zones():
 		if p.distance_to(zones()[key]) <= button_scale*(44 if key=="jump" else 40): return key
 	if Rect2(869,12,69,56).has_point(p): return "pause"
@@ -58,6 +61,10 @@ func _draw() -> void:
 			draw_rect(pause_rect,Color(.06,.11,.12,.58))
 			for x in [898,906]:
 				draw_line(Vector2(x,27),Vector2(x,45),PAPER,3,true)
+			if scene_skip_enabled:
+				draw_rect(SKIP_SCENE_RECT,Color(.06,.11,.12,.70))
+				draw_rect(SKIP_SCENE_RECT,BRASS,false,1)
+				draw_string(MONO,Vector2(822,42),"R",HORIZONTAL_ALIGNMENT_CENTER,45,19,BRASS)
 			draw_controls()
 			if intro>0:
 				var alpha := minf(1.0,intro)
@@ -75,6 +82,8 @@ func _draw() -> void:
 				context="Operate" if touch_device else "E   /   Operate"
 			elif route.near_valve>=0:
 				context=route.valve_action if touch_device else "E   /   "+route.valve_action
+			elif route.chamber_jump:
+				context="Jump to chamber II"
 			elif route.mounted=="ride" and route.pos.x<560:
 				context="The boar runs. Jump the breaks in the road."
 			elif route.near_crate:
