@@ -57,6 +57,11 @@ body = sosfilt(butter(2, 530, fs=R, output="sos"), hit_rng.standard_normal(len(t
 body /= max(np.abs(body).max(), 1e-6)
 envelope = (1 - np.exp(-220*t))*np.exp(-17*t)
 hit = .61*body*envelope + .16*np.sin(2*np.pi*(89*t - 68*t*t))*envelope*np.exp(-14*t)
+# Round off the loudest peaks to leave headroom for the in-game death cue.
+peak = np.abs(hit)
+knee, ceiling = .17, .215
+rounded = knee + (ceiling - knee)*np.tanh((peak - knee)/(ceiling - knee))
+hit = np.copysign(np.where(peak > knee, rounded, peak), hit)
 save("impact", hit)
 
 # Game effects for the walking surfaces, insects, and primates.
@@ -105,3 +110,18 @@ phase=2*np.pi*(67*t+19*t*t)+1.4*np.sin(2*np.pi*t*29)
 growl=.28*np.sin(phase)+.21*np.sin(2*phase)+.12*np.sin(3*phase)
 breath=.46*noise(t,1200)
 save("gorilla_call",(growl+breath)*attack_decay(t,26,4.4)*(1-.35*tone(t,8)))
+
+# Boarding grunt and the gorilla's two-beat chest display.
+t=timeline(.72)
+phase=2*np.pi*(105*t+17*t*t+1.6*np.sin(2*np.pi*t*9))
+grunt=.32*np.sin(phase)+.18*np.sin(3*phase)+.09*np.sin(5*phase)
+save("boar_call",(grunt+.45*noise(t,1450))*attack_decay(t,42,6.2)*(1+.23*tone(t,13)))
+
+t=timeline(.8)
+phase=2*np.pi*(72*t+24*t*t)+1.3*np.sin(2*np.pi*t*19)
+voice=(.24*np.sin(phase)+.21*np.sin(2*phase)+.27*noise(t,1550))*attack_decay(t,37,5.2)
+for beat in [.23,.51]:
+    after=np.maximum(0,t-beat)
+    thump=.30*tone(after,98)+.24*tone(after,184)+.20*noise(t,750)
+    voice+=thump*attack_decay(after,400,25)
+save("gorilla_intro",voice)

@@ -21,6 +21,7 @@ var board_specs: Dictionary
 var screen := ""
 var resume_to := "play"
 var settings_return := "menu"
+var opening_dialogue := false
 var credits_return := "menu"
 var active_station := -1
 var fingers := {}
@@ -49,6 +50,8 @@ func _ready() -> void:
 	add_child(hud)
 	hud.touch_device=OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
 	add_child(audio)
+	scenery.thunder.connect(func(distant: bool):
+		if screen=="play": audio.cue("thunder_distant" if distant else "thunder"))
 	board_specs = JSON.parse_string(FileAccess.get_file_as_string("res://art/schematics.json"))
 	board_specs.merge(Book.NEW_BOARDS)
 	logbook = Logbook.new()
@@ -169,6 +172,14 @@ func new_game() -> void:
 	logbook.played = 0
 	horn_count = 0
 	enter_room(0,[])
+	begin_dock_scene()
+
+func begin_dock_scene() -> void:
+	opening_dialogue=true
+	hud.controls_locked=true
+	scenery.dock_scene=true
+	hud.intro=7.0
+	hud.notice="Mara: The channel light is out. My ferry is still out there."
 
 func continue_game() -> void:
 	replay = false
@@ -193,6 +204,11 @@ func enter_room(index: int, cleared: Array) -> void:
 	route = Passage.new(index,known)
 	var continuing_ride:=prior!=null and prior.finish and index==prior.room+1 and route.boar_road and prior.boar_road and Book.chapter(index)==Book.chapter(prior.room)
 	if continuing_ride: route.continue_boar(prior)
+	if prior!=null and prior.finish and index==prior.room+1 and not prior.gorilla.is_empty() and not route.gorilla.is_empty():
+		route.continue_gorilla(prior)
+	opening_dialogue=false
+	hud.controls_locked=false
+	scenery.dock_scene=false
 	scenery.route = route
 	hud.route = route
 	hud.replay = replay
@@ -361,6 +377,7 @@ func play_chapter(index: int) -> void:
 	replay_can_unlock=not hud.scene_skip_enabled
 	replay_time=0
 	enter_room(Book.CHAPTER_STARTS[index],[])
+	if index==0: begin_dock_scene()
 
 func open_credits(from: String) -> void:
 	credits_return=from
@@ -368,8 +385,8 @@ func open_credits(from: String) -> void:
 
 func credits() -> void:
 	title("THE LAST FERRY","Credits")
-	hud.label(hud,Rect2(56,151,790,48),"Created by sArwar_sHafee",SERIF,31,hud.BRASS)
-	hud.label(hud,Rect2(56,213,790,147),"Harbor paintings created with OpenAI ImageGen. Dog bark recorded by Amada44. Keeper animation, machinery, puzzles and music were made for this voyage.\n\nBuilt with Godot Engine. Typography uses Yrsa and Liberation Mono.",ThemeDB.fallback_font,19,hud.PAPER,true)
+	hud.label(hud,Rect2(56,151,790,48),"Game development · GPT 6.2 Astra",SERIF,31,hud.BRASS)
+	hud.label(hud,Rect2(56,213,790,147),"Harbor paintings created with OpenAI ImageGen. Dog bark recorded by Amada44. Thunder recorded by Bidgee. Keeper animation, machinery, puzzles and music were made for this voyage.\n\nBuilt with Godot Engine. Typography uses Yrsa and Liberation Mono.",ThemeDB.fallback_font,19,hud.PAPER,true)
 	hud.button(hud,Rect2(56,388,140,49),"Back",func(): set_screen(credits_return))
 	hud.button(hud,Rect2(212,388,174,49),"Licenses",func(): set_screen("licenses"))
 
@@ -380,7 +397,7 @@ func licenses() -> void:
 	box.wrap_mode=TextEdit.LINE_WRAPPING_BOUNDARY
 	box.position=Vector2(56,145)
 	box.size=Vector2(846,252)
-	var notices:=PackedStringArray([Engine.get_license_text(),FileAccess.get_file_as_string("res://audio/bark-license.txt"),FileAccess.get_file_as_string("res://audio/splash-license.txt"),FileAccess.get_file_as_string("res://art/fonts/notices.txt")])
+	var notices:=PackedStringArray([Engine.get_license_text(),FileAccess.get_file_as_string("res://audio/bark-license.txt"),FileAccess.get_file_as_string("res://audio/splash-license.txt"),FileAccess.get_file_as_string("res://audio/thunder-license.txt"),FileAccess.get_file_as_string("res://art/fonts/notices.txt")])
 	for component in Engine.get_copyright_info():
 		notices.append(str(component.name))
 		for part in component.parts:
@@ -394,13 +411,13 @@ func licenses() -> void:
 	hud.button(hud,Rect2(56,431,125,46),"Back",func(): set_screen("credits"))
 
 func use_nearby() -> void:
-	if screen!="play": return
+	if screen!="play" or hud.controls_locked: return
 	if route.use_key_gate() or route.toggle_ladder(): return
 	if route.operate_valve(): return
 	open_station()
 
 func open_station() -> void:
-	if screen!="play" or route.near_station<0: return
+	if screen!="play" or hud.controls_locked or route.near_station<0: return
 	active_station=route.near_station
 	practicing=false
 	show_board(route.stations[active_station].board,route.room)
@@ -409,6 +426,8 @@ func show_board(key: String,index: int) -> void:
 	console=Console.new()
 	add_child(console)
 	console.setup(board_specs[key],key,index,practicing)
+	if hud.scene_skip_enabled:
+		console.button(console,Rect2(51,488,156,40),"Skip puzzle",skip_puzzle)
 	console.closed.connect(close_console)
 	console.restored.connect(solve_console)
 	console.mechanical.connect(audio.cue)
@@ -436,6 +455,10 @@ func leave_practice() -> void:
 	dispose_console()
 	practicing=false
 	set_screen("workshop")
+
+func skip_puzzle() -> void:
+	if screen=="console" and hud.scene_skip_enabled and is_instance_valid(console):
+		solve_console()
 
 func solve_console() -> void:
 	if practicing:
@@ -475,7 +498,7 @@ func room_finished() -> void:
 		enter_room(route.room+1,[])
 
 func debug_skip_scene() -> void:
-	if not hud.scene_skip_enabled or screen!="play" or route==null: return
+	if not hud.scene_skip_enabled or screen!="play" or route==null or hud.controls_locked: return
 	# Touch and mouse emulation can deliver two presses in the same frame.
 	var frame:=Engine.get_process_frames()
 	if frame==last_skip_frame: return
@@ -515,7 +538,7 @@ func signal_ferry() -> void:
 func final_page() -> void:
 	hud.label(hud,Rect2(53,81,400,32),"THE LAST FERRY",MONO,15,hud.BRASS)
 	hud.label(hud,Rect2(50,131,550,92),"Home by dawn",SERIF,64)
-	hud.label(hud,Rect2(54,230,375,91),"The hull kisses the landing. For the first time since the flood, someone ties a line on the other side.",ThemeDB.fallback_font,19,hud.PAPER,true)
+	hud.label(hud,Rect2(54,230,375,91),"Mara catches the bowline and ties it fast. “Count the lights,” she says. Every cabin window is lit.",ThemeDB.fallback_font,19,hud.PAPER,true)
 	var duration:=floori(replay_time if replay else logbook.played)
 	var time_caption:="Chapter time" if replay else "Voyage time"
 	hud.label(hud,Rect2(54,326,407,32),"%s    %02d:%02d:%02d" % [time_caption,floori(duration/3600.0),floori(duration/60.0)%60,duration%60],MONO,15,hud.BRASS)
@@ -523,6 +546,7 @@ func final_page() -> void:
 	hud.button(hud,Rect2(222,374,163,51),"Title screen",leave_voyage)
 
 func back() -> void:
+	if screen=="play" and hud.controls_locked: return
 	match screen:
 		"play","aim": pause_game()
 		"console": close_console()
@@ -551,6 +575,9 @@ func _notification(what: int) -> void:
 
 func _input(event: InputEvent) -> void:
 	if not ready_game: return
+	if screen=="play" and hud.controls_locked:
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey:
 		if event.pressed and not event.echo:
 			if event.keycode in [KEY_ESCAPE,KEY_BACK]:
@@ -598,6 +625,7 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func trigger_zone(key: String) -> void:
+	if hud.controls_locked: return
 	match key:
 		"jump": jump_request=true
 		"use": use_nearby()
@@ -614,7 +642,13 @@ func _physics_process(dt: float) -> void:
 	if route.ladder>=0:
 		left=left or Input.is_physical_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)
 		right=right or Input.is_physical_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_SPACE) or keys.has("jump")
-	route.step(dt,float(right)-float(left),jump_request,key_grip or keys.has("use"))
+	if hud.controls_locked:
+		route.step(dt,0,false,false)
+	else:
+		route.step(dt,float(right)-float(left),jump_request,key_grip or keys.has("use"))
+	var locked:=opening_dialogue or route.gorilla_intro_active()
+	if locked!=hud.controls_locked: clear_input()
+	hud.controls_locked=locked
 	jump_request=false
 	if route.room==0 and not replay and horn_count<3 and route.elapsed>1.0+horn_count*2.85:
 		audio.cue("signal")
@@ -635,7 +669,12 @@ func _process(dt: float) -> void:
 		if replay: replay_time+=dt
 		else: logbook.played+=dt
 	if screen=="play":
+		if opening_dialogue and hud.intro>3.5 and hud.intro-dt<=3.5:
+			hud.notice="Keeper: Watch the tower, Mara. I’ll bring them home."
 		hud.intro=maxf(0,hud.intro-dt)
+		if opening_dialogue and hud.intro<=0:
+			opening_dialogue=false
+			hud.controls_locked=false
 		audio.fade_story(hud.intro)
 		hud.fade=maxf(0,hud.fade-dt)
 	if screen=="aim":

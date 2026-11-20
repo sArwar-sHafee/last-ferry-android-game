@@ -58,7 +58,9 @@ func run() -> void:
 			if game.logbook.played-room_start>180:
 				printerr("Pilot stalled in ",r.room," at ",r.pos," g",r.grounded," touch",game.fingers," down",down)
 				quit(1);return
-			if r.near_station>=0:
+			if game.hud.controls_locked:
+				controls(false,false,false,false)
+			elif r.near_station>=0:
 				controls(false,false,false,false)
 				finger(8,"use",true)
 				finger(8,"use",false)

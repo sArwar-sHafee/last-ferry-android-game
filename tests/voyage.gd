@@ -104,7 +104,8 @@ func pilot(r: Passage) -> Array:
 		if device.type in ["hound","spider"] and device.mode==2 and r.is_grounded():
 			var distance:float=(r.pos.x-float(device.dog))*float(device.facing)
 			var closing:float=float(device.speed)+r.SPEED if device.facing<0 else float(device.speed)-r.SPEED
-			if distance>0 and distance<closing*.31:
+			var takeoff:=closing*.31 if device.facing<0 else 25.0+closing*.135
+			if distance>0 and distance<takeoff:
 				landing=-1
 				return [1,true,false]
 		if device.type=="steam" and float(device.x)-r.pos.x>24 and float(device.x)-r.pos.x<54:
@@ -207,6 +208,13 @@ func lifecycle_checks() -> void:
 	game.audio.set_enabled(true)
 	game.new_game()
 	check(game.hud.intro>0 and game.audio.story.playing,"opening narration starts the story score")
+	var before_dialogue:=game.route.pos
+	touch(1,game.hud.zones().right,true)
+	touch(2,game.hud.zones().jump,true)
+	game.back()
+	game._physics_process(1.0/60)
+	check(game.hud.controls_locked and game.route.pos==before_dialogue and game.screen=="play",
+		"movement, jump, and Back stay locked during Mara’s dialogue")
 	game.pause_game()
 	check(game.audio.story.stream_paused,"story score pauses with the text")
 	game.back()
@@ -214,7 +222,7 @@ func lifecycle_checks() -> void:
 	game._process(game.hud.intro-.5)
 	check(game.audio.story.volume_db<-9,"story score fades with the text")
 	game._process(.6)
-	check(not game.audio.story.playing,"story score stops when the text clears")
+	check(not game.audio.story.playing and not game.hud.controls_locked,"clearing the dialogue stops the story score and unlocks controls")
 	for j in 4: game._physics_process(1.0/60)
 	touch(1,game.hud.zones().right,true)
 	touch(2,game.hud.zones().jump,true)
@@ -369,6 +377,7 @@ func update_checks() -> void:
 	game.back()
 	check(game.screen=="menu","workshop Back returns to its entrance")
 	game.new_game()
+	game._process(7.1)
 	var r:=game.route
 	game.pause_game()
 	game.open_settings("pause")
@@ -474,7 +483,7 @@ func hazard_and_storm_checks() -> void:
 	check(splash_voice.volume_db==-10,"the water death cue keeps its volume")
 	var impact_voice:AudioStreamPlayer=game.audio.layers[game.audio.cursor]
 	game.audio.cue("impact")
-	check(impact_voice.volume_db==-3,"other deaths play a slightly louder impact")
+	check(is_equal_approx(impact_voice.volume_db,6+linear_to_db(2.0)),"other deaths play at double the previous gain")
 	var landing_voice:AudioStreamPlayer=game.audio.layers[game.audio.cursor]
 	game.audio.cue("land")
 	check(landing_voice.volume_db==-5,"ordinary landings keep their volume")
@@ -506,6 +515,7 @@ func hazard_and_storm_checks() -> void:
 	var dark_intervals:={}
 	var short_intervals:={}
 	var flash_counts:={}
+	game.audio.set_enabled(true)
 	for i in 30:
 		scenery.route.elapsed=scenery.next_strike
 		check(scenery.storm_seconds()==0,"a scheduled lightning strike starts")
@@ -526,6 +536,12 @@ func hazard_and_storm_checks() -> void:
 		check(flashes==scenery.strike_count,"each scheduled flash has a distinct brightness peak")
 		check(duration<.5 if flashes==1 else duration>1.8,"single flashes fade quickly and bursts retain a longer afterglow")
 		flash_counts[flashes]=true
+		var thunder_voice: AudioStreamPlayer=game.audio.layers[game.audio.cursor]
+		var thunder_key:="thunder_distant" if flashes==1 else "thunder"
+		scenery.route.elapsed=scenery.thunder_at
+		scenery.storm_seconds()
+		check(thunder_voice.stream==game.audio.samples[thunder_key],"single flashes and bursts play their matching thunder recordings")
+	game.audio.set_enabled(false)
 	check(flash_counts.has_all([1,2,3]),"the storm randomly produces singles, doubles, and triples")
 	check(short_intervals.size()>1,"the shorter pause also varies")
 	check(dark_intervals.size()>6,"dark intervals vary instead of repeating a fixed cycle")
@@ -668,7 +684,15 @@ func vehicle_checks() -> void:
 	game.enter_room(opening,[])
 	var road:=game.route
 	var boar:Dictionary=road.rides[0]
-	check(road.rides.size()==1 and road.active_ride==0,"boar road starts with one mounted boar")
+	check(road.rides.size()==1 and road.active_ride<0 and float(boar.position.x)>road.pos.x,
+		"the keeper starts on foot beside a waiting boar")
+	for frame in 12: road.step(1.0/60,0,false,false)
+	check(road.active_ride<0 and not road.events.has("boar_call"),"the boar waits for the keeper to approach")
+	for frame in 65:
+		road.step(1.0/60,1,false,false)
+		if road.active_ride>=0: break
+	check(road.active_ride==0 and road.mounted=="ride" and road.events.count("boar_call")==1,
+		"approaching the tether starts the ride with one boar call")
 	for frame in 12: game._physics_process(1.0/60)
 	var cruise:=road.vel.x
 	touch(6,game.hud.zones().left,true)
@@ -713,7 +737,7 @@ func boar_speed_crossing_checks() -> void:
 					var edge: float=deck.pos.x+deck.w
 					# A faster approach jumps earlier. At the slow pace, use more of the deck.
 					if next.pos.x-edge>6: jump=edge-ride.pos.x<19+direction*11
-				ride.step(1.0/60,direction,jump,false)
+				ride.step(1.0/60,1 if ride.active_ride<0 else direction,jump,false)
 				if ride.finish or ride.death_timer>0: break
 			check(ride.finish and ride.death_timer==0,"mounted scene clears at speed input %d" % direction)
 
@@ -767,8 +791,8 @@ func chapter_progress_checks() -> void:
 		check(game.screen=="support" and menu_button("Star on GitHub")!=null,"Support opens GitHub support options")
 		game.back()
 	game.open_credits("menu")
-	check(game.hud.get_children().any(func(node): return node is Label and "sArwar_sHafee" in node.text),
-		"the credits use the GitHub display name")
+	check(game.hud.get_children().any(func(node): return node is Label and "GPT 6.2 Astra" in node.text),
+		"the credits name the development model")
 	game.set_screen("chapters")
 	check(game.hud.get_children().filter(func(node): return node is Button).size()==3,
 		"only chapter one and the navigation actions appear on a fresh install")
@@ -822,6 +846,7 @@ func debug_skip_checks() -> void:
 	game._input(key)
 	check(game.screen=="aim","skipping the last scene opens the final beacon")
 	game.new_game()
+	game._process(7.1)
 	game.last_skip_frame=-1
 	game._input(key)
 	var lamp: Dictionary=game.route.stations[0]
@@ -837,6 +862,37 @@ func debug_skip_checks() -> void:
 	game.open_station()
 	check(game.screen=="console" and game.console.board_id=="relay1","Chapter 2 replay opens its own relay")
 	game.close_console()
+
+func puzzle_skip_checks() -> void:
+	for index in range(Book.CHAPTER_STARTS[10],Book.CHAPTER_STARTS[11]):
+		check(Passage.new(index).stations.all(func(station): return station.board.is_empty()),
+			"the gorilla chapter uses automatic checkpoints")
+	var index:=Book.migrated_room(135)
+	game.enter_room(index,[])
+	var lamp: Dictionary=game.route.stations[0]
+	check(lamp.board=="s2","Storm Glass hosts the relocated skiff puzzle")
+	game.route.pos=Vector2(lamp.x,lamp.y)
+	game.route.step(1.0/60,0,false,false)
+	game.open_station()
+	var skip:=game.console.get_children().filter(func(node): return node is Button and node.text=="Skip puzzle")
+	if check(skip.size()==1,"the developer sees a Skip puzzle button"):
+		check(not game.console.model.solved(),"the board starts unsolved")
+		skip[0].pressed.emit()
+		check(game.screen=="play" and game.route.completed==["p9"],"the skipped campaign board unlocks the route")
+	game.open_workshop("menu")
+	game.practice_station("chart1")
+	var practice_skip:=game.console.get_children().filter(func(node): return node is Button and node.text=="Skip puzzle")
+	if check(practice_skip.size()==1,"the developer can skip in the workshop"):
+		practice_skip[0].pressed.emit()
+		check(game.screen=="workshop","skipping a practice puzzle returns to the workshop")
+	game.update_keeper_name("")
+	game.practice_station("chart1")
+	check(not game.console.get_children().any(func(node): return node is Button and node.text=="Skip puzzle"),
+		"regular players have no skip button")
+	game.skip_puzzle()
+	check(game.screen=="console","regular players cannot bypass a board")
+	game.leave_practice()
+	game.update_keeper_name("SHA2027")
 
 func debug_chapter_checks() -> void:
 	check(Book.CHAPTERS.size()==13 and Book.CHAPTER_STARTS.back()==Book.ROOMS.size(),"13 chapters cover every scene")
@@ -1143,19 +1199,46 @@ func ladder_checks() -> void:
 	check(game.route.completed.has("ladder-exit") and game.route.key_gates[0].open,
 		"Continue beyond the door restores it open")
 
-	for direction in [-1,1]:
-		r=Passage.new(Book.migrated_room(148),["18a"])
-		rungs=r.ladders[0]
-		r.pos=rungs.lower_landing if direction>0 else rungs.upper_landing
-		check(r.toggle_ladder(),"the final ladder can be grabbed from either end")
-		for frame in 18: r.step(DT,direction,false,false)
-		var monkey: Dictionary=r.devices.back()
-		var threw:=false
-		for frame in 120:
+	for source in [134,148]:
+		var room:=Book.migrated_room(source)
+		var cleared:=["7a"] if source==134 else ["18a"]
+		var launch_velocity:=Vector2.ZERO
+		for from_top in [false,true]:
+			r=Passage.new(room,cleared)
+			rungs=r.ladders[0]
+			r.pos=rungs.upper_landing if from_top else rungs.lower_landing
+			var monkey: Dictionary=r.devices.back()
 			r.step(DT,0,false,false)
-			threw=threw or not monkey.rocks.is_empty()
+			check(monkey.rocks.is_empty(),"the ladder guard waits until the keeper grabs the ladder")
+			check(r.toggle_ladder(),"the guarded ladder can be grabbed from either end")
+			if not check(monkey.rocks.size()==1 and r.events.has("rock_throw"),"the guard throws on the grab"):
+				continue
+			var rock: Dictionary=monkey.rocks[0]
+			var start_y:=float(rock.pos.y)
+			if from_top:
+				check(rock.velocity.is_equal_approx(launch_velocity),"both ends trigger the same fixed trajectory")
+			else:
+				launch_velocity=rock.velocity
+			for frame in roundi(Passage.LADDER_ROCK_FLIGHT/DT): r.step(DT,0,false,false)
+			var midpoint:=Vector2(rungs.x,(float(rungs.top)+float(rungs.bottom))*.5)
+			check(rock.pos.distance_to(midpoint)<.02 and start_y<rock.pos.y and launch_velocity.y>=0,
+				"the rock travels down through the ladder midpoint without rising")
+			check(r.death_timer==0,"waiting at either end avoids the throw")
+			if from_top:
+				for frame in 8: r.step(DT,0,false,false)
+				for frame in 90:
+					r.step(DT,-1,false,false)
+					if r.ladder<0: break
+				check(r.death_timer==0 and r.pos==rungs.lower_landing,"the keeper can descend after the first stone passes")
+
+		r=Passage.new(room,cleared)
+		rungs=r.ladders[0]
+		r.pos=Vector2(float(rungs.x)-14,(float(rungs.top)+float(rungs.bottom))*.5+20)
+		r.toggle_ladder()
+		for frame in 60:
+			r.step(DT,0,false,false)
 			if r.death_timer>0: break
-		check(threw and r.death_timer>0 and r.ladder<0,"an aimed rock can knock a keeper off the ladder")
+		check(r.death_timer>0 and r.ladder<0,"the fixed throw still knocks the keeper off at the midpoint")
 
 func progression_checks() -> void:
 	var pairs:={
@@ -1210,14 +1293,9 @@ func finale_rehearsal_checks() -> void:
 				var count:=int(prior_counts.get(token,0))
 				check(count>=1 and count<=2,"finale section has one or two earlier appearances: "+token)
 				check(token!="monkey_crossfire","the monkey crossfire stays outside the finale")
-	var practice:=Passage.new(Book.migrated_room(133))
-	var hunter: Dictionary=practice.devices[0]
-	var lamp: Dictionary=practice.stations[0]
-	practice.pos=Vector2(lamp.x,lamp.y)
-	practice.step(1.0/60,0,false,false)
-	check(hunter.mode==2 and practice.completed.has(lamp.key),"the practice gorilla stops at the safe lamp")
-	practice=Passage.new(Book.migrated_room(133),["6a"])
-	check(practice.devices[0].mode==2,"continuing at the lamp leaves the practice chase behind")
+		if Book.chapter(room)==finale:
+			check(not Passage.new(room).devices.any(func(device): return device.type=="gorilla"),
+				"the final chapter has no gorilla")
 
 func monkey_crossfire_checks() -> void:
 	const DT:=1.0/60.0
@@ -1245,7 +1323,7 @@ func monkey_crossfire_checks() -> void:
 func gameplay_sound_checks() -> void:
 	const DT:=1.0/60.0
 	for sample in ["step_wood","step_grass","step_stone","step_clay","step_glass","step_soft",
-			"monkey_call","rock_throw","gorilla_call"]:
+			"monkey_call","rock_throw","gorilla_call","gorilla_intro","boar_call"]:
 		check(game.audio.samples[sample] is AudioStreamOggVorbis,"playable sound for "+sample)
 	for sample in [[0,"step_wood"],[20,"step_grass"],[68,"step_clay"],[103,"step_glass"],[138,"step_soft"]]:
 		var crossing:=Passage.new(Book.migrated_room(sample[0]))
@@ -1275,6 +1353,14 @@ func gameplay_sound_checks() -> void:
 	check(game.audio.swarm_buzz.playing,"resuming restores the chase buzz")
 	game.enter_room(0,[])
 	check(not game.audio.swarm_buzz.playing,"the loop does not leak into the next scene")
+	game.audio.update_swarm(24)
+	var near_volume:=game.audio.swarm_buzz.volume_db
+	game.audio.update_swarm(230)
+	check(near_volume>-3 and game.audio.swarm_buzz.volume_db>=-16 and game.audio.swarm_buzz.volume_db<near_volume,
+		"the buzz is prominent up close and audible at chase distance")
+	var voice: AudioStreamPlayer=game.audio.layers[game.audio.cursor]
+	game.audio.cue("monkey_call")
+	check(voice.volume_db==2,"the monkey call plays at the raised volume")
 	game.audio.set_enabled(false)
 
 	var monkey_run:=Passage.new(Book.migrated_room(23),["18a"])
@@ -1288,30 +1374,66 @@ func gameplay_sound_checks() -> void:
 
 func gorilla_checks() -> void:
 	const DT:=1.0/60.0
-	var index:=Book.migrated_room(138)
+	var index:=Book.migrated_room(133)
 	var r:=Passage.new(index)
 	var ape: Dictionary=r.devices[0]
-	check(float(ape.chase.x)<r.pos.x,"the gorilla starts behind the keeper")
-	for frame in 100:
+	for frame in 90: r.step(DT,0,false,false)
+	check(ape.mode==Passage.GorillaMode.HIDDEN and not r.events.has("gorilla_intro") and r.death_timer==0,
+		"the gorilla stays hidden before the keeper starts walking")
+	for frame in 90:
+		r.step(DT,1,false,false)
+		if ape.mode==Passage.GorillaMode.ENTERING: break
+	check(ape.mode==Passage.GorillaMode.ENTERING and ape.chase.x<r.camera-40 and not r.events.has("gorilla_intro"),
+		"the keeper triggers the gorilla's entrance beyond the left edge")
+	for frame in 90:
 		r.step(DT,0,false,false)
+		if ape.mode==Passage.GorillaMode.DISPLAY: break
+	check(ape.chase.x>r.camera and ape.mode==Passage.GorillaMode.DISPLAY and "gorilla_intro" in r.events,
+		"the gorilla walks into view before its chest-beat introduction")
+	var reveal: Vector2=ape.chase
+	var keeper: Vector2=r.pos
+	for frame in 38: r.step(DT,1,true,true)
+	check(ape.mode==Passage.GorillaMode.DISPLAY and ape.chase==reveal and r.pos==keeper and r.death_timer==0,
+		"the keeper stays still through the gorilla's display despite movement and jump input")
+	var max_pace:=0.0
+	for frame in 120:
+		var previous_x:=float(ape.chase.x)
+		r.step(DT,0,false,false)
+		max_pace=maxf(max_pace,(float(ape.chase.x)-previous_x)/DT)
 		if r.death_timer>0: break
-	check(r.death_timer>0 and "impact" in r.events and "gorilla_call" in r.events,
-		"the gorilla announces the chase and catches a stationary keeper")
-	for frame in 43: r.step(DT,0,false,false)
-	check(r.pos.distance_to(r.checkpoint)<3 and float(ape.chase.x)<r.pos.x-130,"respawn restarts the chase from behind")
+	check(r.death_timer==Passage.GORILLA_SLAM_TIME and ape.mode==Passage.GorillaMode.SLAM and max_pace<=Passage.GORILLA_MAX_SPEED+.1,
+		"catching a stationary keeper starts the two-handed slam")
+	check(not r.events.has("impact"),"ground impact waits for the fists")
+	for frame in 22: r.step(DT,0,false,false)
+	check(r.events.count("impact")==1,"the slam plays one impact when both fists hit")
+	for frame in 39: r.step(DT,0,false,false)
+	check(r.pos.distance_to(r.checkpoint)<3 and ape.mode==Passage.GorillaMode.HIDDEN,"respawn resets the gorilla introduction")
 	r=Passage.new(index)
 	ape=r.devices[0]
 	var stayed_behind:=true
-	var chased_through_planks:=false
+	var swung_from_ropes:=false
 	landing=-1
 	for frame in 1900:
 		var move:=pilot(r)
 		r.step(DT,move[0],move[1],move[2])
-		stayed_behind=stayed_behind and float(ape.chase.x)<r.pos.x
-		if r.grounded>=0 and r.platforms[r.grounded].style=="loose" and r.pos.x-float(ape.chase.x)<130:
-			chased_through_planks=true
+		if ape.mode==Passage.GorillaMode.RUNNING:
+			stayed_behind=stayed_behind and float(ape.chase.x)<r.pos.x
+		if ape.rope>=0:
+			swung_from_ropes=true
 		if r.finish or r.death_timer>0: break
-	check(r.finish and stayed_behind and chased_through_planks,"the gorilla stays close behind through the obstacles all the way to the exit")
+	check(r.finish and stayed_behind and swung_from_ropes and ape.mode==Passage.GorillaMode.RUNNING,
+		"the gorilla swings across the planks and pursues past the checkpoint to the exit")
+	game.enter_room(index,[])
+	game.route.finish=true
+	game.route.pos.x=game.route.width-28
+	game.route.gorilla.chase.x=game.route.pos.x-193
+	game.enter_room(index+1,[])
+	check(game.route.gorilla.mode==Passage.GorillaMode.RUNNING and is_equal_approx(game.route.pos.x-game.route.gorilla.chase.x,193),
+		"the running gorilla keeps its lead distance into The Gull Roost")
+	for item in [[index,"6a"],[index+1,"7a"]]:
+		var resumed:=Passage.new(item[0],[item[1]])
+		check(resumed.gorilla.mode==Passage.GorillaMode.RUNNING and resumed.gorilla.chase.x<resumed.pos.x,
+			"resuming from a Chapter 11 checkpoint preserves the chase")
 
 func run() -> void:
 	game=Main.new()
@@ -1342,8 +1464,10 @@ func run() -> void:
 	chamber_transfer_checks()
 	developer_name_checks()
 	debug_skip_checks()
+	puzzle_skip_checks()
 	debug_chapter_checks()
 	disable_developer_checks()
+	game._process(7.1)
 	for index in Book.ROOMS.size():
 		run_room(index)
 	check(gameplay_seconds<1800,"compact voyage takes less than 30 minutes of uninterrupted traversal")

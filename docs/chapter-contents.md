@@ -15,14 +15,14 @@ The chapter picker numbers the shorter voyage consecutively. The table includes 
 | 03 | 04 | Mangrove Canopy | Out of Soundings<br>The Outer Piles<br>Dogs at Anchor<br>The Old Fish Market | Move through branches and a swinging vine. Meet the swarm, spider, and rock-throwing monkey separately. |
 | 04 | 06 | The Pumpworks | Below the Gauge<br>The Overflow Lip<br>The Gauge Keeper | Learn the two-chamber transfer, tilting bridge, and steam vent on their own. Wait for the pumpwork drain to finish releasing acid. |
 | 05 | 09 | The Freightyard | The Swept Rails<br>The Upper Track<br>The Crane Saddle | Ride a trolley and use a balance platform. Learn to shelter from the rolling drum and jump off a sagging cargo net. |
-| 06 | 11 | Boar Run | Bracken Gate<br>The Root Road<br>Split Hoof Ford | Keep the same boar through an introductory stretch, a spillway, and a seven-plank crossing. Dismount at the galleries. |
+| 06 | 11 | Boar Run | Bracken Gate<br>The Root Road<br>Split Hoof Ford | Approach the tethered boar on foot to start the ride. Cross a spillway and seven loose planks before dismounting at the galleries. |
 | 07 | 13 | The Engine Galleries | The Flywheel Pit<br>The Sump Bridge<br>The Boiler Feed | Time a pair of vents, then a vent followed by spikes. Run under a lifting roof before it drops, then jump straight from a tilting bridge onto a skiff. |
 | 08 | 14 | The Limestone Cut | A Hollow Knocking<br>The Delivery Main<br>The Pumpman’s Locker | Run from the elephant. Cross four breakable planks with a swarm in pursuit, then climb out by lift cage. |
 | 09 | 16 | The Lens Works | A Line of Prisms<br>The Silvered Room<br>The Prism Bath | Use moving floats, suspended light blocks, a shutter, and a lift leading to wider causeway jumps. |
 | 10 | 18 | The Tower Shaft | The Keeper’s Launch<br>The Brass Ladder<br>The Blind Landing | Unlock the ladder door and cross an aqueduct into a bridge-to-skiff jump. Practice the acid gate and stepped ascent in The Blind Landing. |
-| 11 | 19 | The Breakwater | The Cable Drum<br>The Gull Roost | Practice escaping a gorilla over five loose planks and a long gap. Climb past a rock-throwing monkey in The Gull Roost. |
-| 12 | 20 | The Lantern Cage | Storm Glass<br>The Night Watch | Leave the sinking net before it drops. In The Night Watch, escape the swarm and hound, time the shutters, and run through a two-monkey ambush. |
-| 13 | 21 | The Storm Beacon | The Winding Floor<br>The Seaward Face<br>The Mercury Bath<br>The Lantern Door<br>Light the Fairway | Escape the gorilla past a charging hound, five loose boards, and a long jump. Later cross six loose planks with a swarm behind you and climb past a rock-throwing monkey. |
+| 11 | 19 | The Breakwater | The Cable Drum<br>The Gull Roost | The gorilla walks in from the left and beats its chest. It swings over the loose planks and gap on ropes and keeps chasing through The Gull Roost. |
+| 12 | 20 | The Lantern Cage | Storm Glass<br>The Night Watch | Clear the skiff channel in Storm Glass, then leave the sinking net before it drops. In The Night Watch, escape the swarm and hound, time the shutters, and run through a two-monkey ambush. |
+| 13 | 21 | The Storm Beacon | The Winding Floor<br>The Seaward Face<br>The Mercury Bath<br>The Lantern Door<br>Light the Fairway | Jump the charging hound, five loose boards, and the last gap. Later cross six loose planks with a swarm behind you and climb past a rock-throwing monkey. |
 
 ## Combined encounters
 
@@ -35,7 +35,7 @@ The chapter picker numbers the shorter voyage consecutively. The table includes 
 | Swarm and hound | Hound in The Tidal Quays (2), swarm in Mangrove Canopy (3) | The Night Watch (12) | — |
 | Acid drain and moving roof | Drain in The Pumpworks (4), roof in The Engine Galleries (7) | The Blind Landing (10) | The Winding Floor (13) |
 | Ladder and rock-throwing monkey | Monkey in Mangrove Canopy (3), ladder in The Tower Shaft (10) | The Gull Roost (11) | The Lantern Door (13) |
-| Gorilla chase over loose planks | Breakable planks in The Landing (1) | The Cable Drum (11), chase ends at the lamp | The Seaward Face (13), with a charging hound |
+| Gorilla chase over loose planks | Breakable planks in The Landing (1) | The Cable Drum (11), with ropes over the planks and gap | The Gull Roost (11), pursuit continues |
 | Two-monkey crossfire | Solo monkey in Mangrove Canopy (3) | The Night Watch (12), both start after you pass the first perch | — |
 
 ## Component catalog
@@ -53,7 +53,7 @@ The roof in The Sump Bridge moves vertically. Wait for it to rise, then run thro
 |  | Rock-throwing monkeys | 5 | 3 (1), 11 (1), 12 (2), 13 (1) |
 |  | Boar rides | 3 | 6 (3) |
 |  | Rail trolleys | 1 | 5 (1) |
-|  | Gorilla chases | 2 | 11 (1), 13 (1) |
+|  | Gorilla chases | 1 | 11 (1) |
 | ⚙️ Machinery and hazards | Two-chamber locks | 2 | 4 (1), 10 (1) |
 |  | Steam vents | 5 | 4 (1), 7 (3), 13 (1) |
 |  | Loose cable drums | 2 | 5 (1), 11 (1) |

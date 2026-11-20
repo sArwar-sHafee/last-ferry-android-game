@@ -1,10 +1,12 @@
 extends RefCounted
 
 const Book = preload("res://scripts/campaign.gd")
-const SPEED := 165.0
+const SPEED := 148.2
+const AIR_SPEED := 152.88
+const RIDE_SPEED := 156.0
 const RIDE_CRUISE := .92
 const BOAR_SPEED_ADJUSTMENT := .16
-const JUMP := 335.0
+const JUMP := 332.0
 const HAND_REACH := 41.0
 const PULL_TIME := 0.52
 const GRAVITY := 990.0
@@ -19,11 +21,20 @@ const SPIKE_PITCH := 14.0
 const SPIKE_HEIGHT := 24.0
 const THROW_WINDUP := .55
 const ROCK_GRAVITY := 640.0
+const LADDER_ROCK_GRAVITY := 64.0
+const LADDER_ROCK_FLIGHT := .90
 const ROCK_RADIUS := 5.0
 const DRUM_RADIUS := 21.0
+const GORILLA_DISPLAY_TIME := .8
+const GORILLA_MAX_SPEED := 151.0
+const GORILLA_SLAM_TIME := 0.96
+const GORILLA_SLAM_IMPACT := 0.34
+enum GorillaMode { HIDDEN, ENTERING, DISPLAY, RUNNING, SLAM }
 const GROUND_STEPS := ["step_wood","step_grass","step_stone","step","step_clay","step_stone","step_glass","step_soft"]
 var room: int
 var rides: Array = []
+var gorilla: Dictionary = {}
+var chase_ropes: Array = []
 var boar_road := false
 var mounted := ""
 var active_ride := -1
@@ -98,12 +109,10 @@ func _init(index: int, cleared: Array = []) -> void:
 	terrace_to(exit_height)
 	dock(170)
 	width = _x
-	for device in devices:
-		if device.type=="gorilla" and not stations.is_empty():
-			device.chase_end=float(stations[0].x)
 	if boar_road:
-		rides.append({"start":checkpoint.x,"end":width,"type":"ride","position":checkpoint,
-			"ground_y":checkpoint.y,"arrived":false})
+		var opening:=room==Book.CHAPTER_STARTS[Book.chapter(room)]
+		rides.append({"start":196.0 if opening else checkpoint.x,"end":width,"type":"ride",
+			"position":checkpoint,"ground_y":Book.deck_height(room),"arrived":false})
 	spawn()
 
 func platform(x: float, y: float, length: float, style: String, delta := Vector2.ZERO, rate := 0.0) -> void:
@@ -268,14 +277,25 @@ func build_section(token: String) -> void:
 			add_swarm(anchor,152.0 if chasing else 54.0)
 			if chasing: plank_run(room+section_number,4 if Book.chapter(room)<12 else 6)
 			else: dock(155)
-		"gorilla_run":
-			# Start both runners on the same deck, with room to see the pursuer.
-			checkpoint.x=_x+21
-			devices.append({"type":"gorilla","x":checkpoint.x-152,"y":_y,
-				"chase":Vector2(checkpoint.x-152,_y),"mode":0,"call_timer":0.0,"chase_end":INF})
-			dock(280)
+		"gorilla_run","gorilla_continue":
+			var opening:=token=="gorilla_run"
+			if opening: checkpoint.x=_x+21
+			gorilla={"type":"gorilla","x":-68.0,"y":_y,"trigger":checkpoint.x+112,
+				"opening":opening,"chase":Vector2(-68,_y),"mode":GorillaMode.HIDDEN,
+				"timer":0.0,"rope":-1,"grip":Vector2.ZERO}
+			devices.append(gorilla)
+			if opening: dock(280)
 		"chase_planks":
+			var first:=platforms.size()
 			plank_run(1,5)
+			if not gorilla.is_empty():
+				var start:=float(platforms[first].base.x)+float(platforms[first].w)-18
+				for i in range(first+2,platforms.size(),2):
+					var landing: Dictionary=platforms[i]
+					var end:=float(landing.base.x)+float(landing.w)*.5
+					add_chase_rope(start,end,_y)
+					start=end
+				add_chase_rope(start,_x-28,_y)
 		"elephant":
 			var home:=_x+126
 			devices.append({"type":token,"x":home,"y":_y,"foot_x":home,"start":_x+52,
@@ -323,7 +343,7 @@ func build_section(token: String) -> void:
 		"hound","hound_spikes","swarm_hound","spider":
 			var start:=_x
 			dock(960,"rail")
-			if token=="swarm_hound": add_swarm(start+42,162.0,start+925)
+			if token=="swarm_hound": add_swarm(start+42,153.0,start+925)
 			var kennel:=start+408
 			devices.append({"type":"spider" if token=="spider" else "hound","x":kennel,"y":_y,"limit":start+45,"far_post":start+925,"dog":kennel,
 				"mode":0,"timer":0.0,"facing":-1,"speed":110.0 if token=="spider" else 262.0+9*(room%4)})
@@ -341,7 +361,9 @@ func build_section(token: String) -> void:
 			dock(45)
 		"gap":
 			dock(54)
-			_x += 102
+			var lip:=_x
+			_x += 94 if room==Book.migrated_room(138) else 102
+			if not gorilla.is_empty(): add_chase_rope(lip-16,_x+18,_y)
 			dock(122)
 		"steps":
 			for rise in [26,28,22]:
@@ -458,11 +480,12 @@ func continue_boar(previous: RefCounted) -> void:
 	last_step=previous.last_step
 
 func spawn() -> void:
-	active_ride=0 if boar_road else -1
-	mounted="ride" if boar_road else ""
+	var waiting_boar:=boar_road and checkpoint.x<float(rides[0].start)
+	active_ride=0 if boar_road and not waiting_boar else -1
+	mounted="ride" if active_ride==0 else ""
 	for ride in rides:
 		if boar_road:
-			ride.position=checkpoint
+			ride.position=Vector2(ride.start,ride.ground_y) if waiting_boar else checkpoint
 		else:
 			ride.arrived=checkpoint.x>=ride.end
 			ride.position=Vector2(ride.end if ride.arrived else ride.start,ride.ground_y)
@@ -499,10 +522,11 @@ func spawn() -> void:
 		elif device.type=="swarm":
 			device.flight=Vector2(device.x-110,device.y-28)
 		elif device.type=="gorilla":
-			var passed: bool=checkpoint.x>=float(device.chase_end)
-			device.mode=2 if passed else 0
-			device.chase=Vector2(device.x,device.y) if passed else Vector2(checkpoint.x-152,checkpoint.y)
-			device.call_timer=0.0
+			device.mode=GorillaMode.HIDDEN if device.opening and completed.is_empty() else GorillaMode.RUNNING
+			var start:=float(device.x) if device.mode==GorillaMode.HIDDEN else checkpoint.x-220
+			device.chase=Vector2(start,device.y)
+			device.timer=2.8
+			device.rope=-1
 		elif device.type=="elephant":
 			device.foot_x=device.x
 			device.facing=1
@@ -642,7 +666,7 @@ func update_elephant(d: Dictionary,dt: float) -> void:
 		2:
 			var target:=clampf(pos.x,float(d.start),float(d.end))
 			if target!=d.foot_x: d.facing=signf(target-float(d.foot_x))
-			d.foot_x=move_toward(float(d.foot_x),target,190.0*dt)
+			d.foot_x=move_toward(float(d.foot_x),target,168.0*dt)
 			if d.foot_x==target and pos.x!=target: d.mode=3
 		3: # The keeper has escaped. Walk back to the grass.
 			d.facing=signf(float(d.x)-float(d.foot_x))
@@ -651,34 +675,70 @@ func update_elephant(d: Dictionary,dt: float) -> void:
 				d.mode=0
 				d.facing=1
 
+func add_chase_rope(start: float,end: float,deck_y: float) -> void:
+	var reach:=(end-start)*.5
+	var drop:=reach*.6+66
+	chase_ropes.append({"start":start,"end":end,"deck_y":deck_y,
+		"anchor":Vector2(start+reach,deck_y-drop-85),"length":Vector2(reach,drop).length()})
+
+func continue_gorilla(previous: RefCounted) -> void:
+	var lead:=maxf(70,previous.pos.x-float(previous.gorilla.chase.x))
+	gorilla.chase.x=pos.x-lead
+	gorilla.timer=previous.gorilla.timer
+
 func update_gorilla(d: Dictionary,dt: float) -> void:
-	if d.mode==2: return
-	if pos.x>=float(d.chase_end):
-		d.mode=2
-		return
+	match int(d.mode):
+		GorillaMode.HIDDEN:
+			if pos.x>=float(d.trigger):
+				d.chase.x=camera-68
+				d.mode=GorillaMode.ENTERING
+			return
+		GorillaMode.ENTERING:
+			var mark:=maxf(0,camera)+62
+			d.chase.x=move_toward(float(d.chase.x),mark,150.0*dt)
+			if d.chase.x>=mark:
+				d.mode=GorillaMode.DISPLAY
+				d.timer=GORILLA_DISPLAY_TIME
+				events.append("gorilla_intro")
+			return
+		GorillaMode.DISPLAY:
+			d.timer-=dt
+			if d.timer<=0:
+				d.mode=GorillaMode.RUNNING
+				d.timer=2.8
+			return
 	var lead:=pos.x-float(d.chase.x)
-	var pace:=clampf(149.0+(lead-44.0)*.24,149.0,174.0)
-	if is_finite(float(d.chase_end)): pace-=9.0
+	var pace:=clampf(124.0+(lead-44.0)*.20,124.0,GORILLA_MAX_SPEED)
 	d.chase.x=minf(pos.x,float(d.chase.x)+pace*dt)
-	var ahead:=Vector2.ZERO
-	var behind:=Vector2(0,d.y)
-	for p in platforms:
-		if not is_solid(p): continue
-		ahead=Vector2(p.pos)
-		if float(d.chase.x)<ahead.x:
-			# Leap across gaps and the planks that have already broken behind the keeper.
-			var progress:=inverse_lerp(behind.x,ahead.x,float(d.chase.x))
-			var rise:=minf((ahead.x-behind.x)*.44,61.0)
-			d.chase.y=lerpf(behind.y,ahead.y,progress)-sin(PI*progress)*rise
-			break
-		behind=Vector2(ahead.x+float(p.w),ahead.y)
-		if float(d.chase.x)<=behind.x:
-			d.chase.y=move_toward(float(d.chase.y),ahead.y,320*dt)
-			break
-	d.call_timer-=dt
-	if d.call_timer<=0:
-		d.call_timer=4.6
+	if not swing_gorilla(d):
+		var surface:=float(d.y)
+		for p in platforms:
+			if p.style in ["loose","bollard"] or not is_solid(p): continue
+			if float(p.pos.x)<=float(d.chase.x): surface=float(p.pos.y)
+		d.chase.y=move_toward(float(d.chase.y),surface,340*dt)
+	d.timer-=dt
+	if d.timer<=0:
+		d.timer=4.6
 		events.append("gorilla_call")
+
+func swing_gorilla(d: Dictionary) -> bool:
+	d.rope=-1
+	var x:=float(d.chase.x)
+	for i in chase_ropes.size():
+		var rope: Dictionary=chase_ropes[i]
+		var start:=float(rope.start)
+		if x<start-24 or x>=float(rope.end): continue
+		if x<start:
+			var lift:=smoothstep(start-24,start,x)
+			d.chase.y=float(rope.deck_y)-29*lift
+			return true
+		var dx:=x-float(rope.anchor.x)
+		var drop:=sqrt(maxf(0,pow(float(rope.length),2)-dx*dx))
+		d.grip=Vector2(x,float(rope.anchor.y)+drop)
+		d.rope=i
+		d.chase.y=float(d.grip.y)+56
+		return true
+	return false
 
 func swarm_distance() -> float:
 	var distance:=INF
@@ -688,21 +748,29 @@ func swarm_distance() -> float:
 			distance=minf(distance,Vector2(d.flight).distance_to(pos-Vector2(0,22)))
 	return distance
 
+func gorilla_intro_active() -> bool:
+	return not gorilla.is_empty() and gorilla.mode in [GorillaMode.ENTERING,GorillaMode.DISPLAY]
+
 func hits_gorilla(d: Dictionary) -> bool:
 	var feet:=Vector2(d.chase)
-	return d.mode!=2 and absf(pos.x-feet.x)<40 and pos.y>feet.y-70 and pos.y-BODY<feet.y
+	return d.mode==GorillaMode.RUNNING and absf(pos.x-feet.x)<40 and pos.y>feet.y-70 and pos.y-BODY<feet.y
 
 func update_monkey(d: Dictionary,dt: float) -> void:
 	for i in range(d.rocks.size()-1,-1,-1):
 		var rock:Dictionary=d.rocks[i]
-		rock.pos+=rock.velocity*dt+Vector2.DOWN*(.5*ROCK_GRAVITY*dt*dt)
-		rock.velocity.y+=ROCK_GRAVITY*dt
+		var gravity:=float(rock.get("gravity",ROCK_GRAVITY))
+		rock.pos+=rock.velocity*dt+Vector2.DOWN*(.5*gravity*dt*dt)
+		rock.velocity.y+=gravity*dt
 		if rock.pos.y>=float(d.y)-ROCK_RADIUS: d.rocks.remove_at(i)
 	d.timer=maxf(0,float(d.timer)-dt)
+	if int(d.target_ladder)>=0:
+		if ladder==int(d.target_ladder) and d.timer<=0:
+			throw_ladder_rock(d,ladders[ladder])
+		return
 	if not d.alerted:
 		if pos.x<float(d.trigger): return
 		d.alerted=true
-	if (d.target_ladder>=0 and ladder!=d.target_ladder) or absf(pos.x-float(d.x))>235 or absf(pos.y-float(d.y))>125:
+	if absf(pos.x-float(d.x))>235 or absf(pos.y-float(d.y))>125:
 		d.mode=0
 		return
 	d.facing=1 if pos.x>=float(d.x) else -1
@@ -720,6 +788,16 @@ func update_monkey(d: Dictionary,dt: float) -> void:
 		events.append("rock_throw")
 		d.mode=0
 		d.timer=1.3
+
+func throw_ladder_rock(monkey: Dictionary,rungs: Dictionary) -> void:
+	var midpoint:=Vector2(rungs.x,(float(rungs.top)+float(rungs.bottom))*.5)
+	monkey.facing=1 if midpoint.x>=float(monkey.x) else -1
+	var hand:=Vector2(float(monkey.x)+monkey.facing*15,float(monkey.y)-93)
+	var velocity:=(midpoint-hand)/LADDER_ROCK_FLIGHT
+	velocity.y-=.5*LADDER_ROCK_GRAVITY*LADDER_ROCK_FLIGHT
+	monkey.rocks.append({"pos":hand,"velocity":velocity,"gravity":LADDER_ROCK_GRAVITY})
+	monkey.timer=1.55
+	events.append("rock_throw")
 
 func hits_spikes(d: Dictionary) -> bool:
 	if pos.y-BODY>=float(d.y): return false
@@ -905,6 +983,10 @@ func toggle_ladder() -> bool:
 	grounded=-1
 	grace=0.0
 	buffer=0.0
+	for monkey in devices:
+		if monkey.type=="monkey" and int(monkey.target_ladder)==ladder:
+			events.append("monkey_call")
+			throw_ladder_rock(monkey,rungs)
 	return true
 
 func ladder_step(dt: float,axis: float) -> void:
@@ -946,7 +1028,10 @@ func vertical_view() -> float:
 	return minf(0.0,pos.y-272)
 
 func track_keeper(dt: float) -> void:
-	camera=lerpf(camera,clampf(pos.x-320,0,maxf(0,width-960)),1-exp(-dt*5))
+	var horizontal:=clampf(pos.x-320,0,maxf(0,width-960))
+	if not gorilla.is_empty() and gorilla.mode in [GorillaMode.HIDDEN,GorillaMode.ENTERING,GorillaMode.DISPLAY]:
+		horizontal=0.0
+	camera=lerpf(camera,horizontal,1-exp(-dt*5))
 	var target:=minf(0,clampf(camera_y,pos.y-320,pos.y-223))
 	camera_y=lerpf(camera_y,target,1-exp(-dt*4))
 
@@ -955,6 +1040,9 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 		return
 	elapsed += dt
 	if death_timer > 0:
+		var impact_at:=GORILLA_SLAM_TIME-GORILLA_SLAM_IMPACT
+		if not gorilla.is_empty() and gorilla.mode==GorillaMode.SLAM and death_timer>impact_at and death_timer-dt<=impact_at:
+			events.append("impact")
 		death_timer -= dt
 		if death_timer <= 0:
 			spawn()
@@ -962,28 +1050,38 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 	if active_ride<0 and ledge<0:
 		for i in rides.size():
 			var vehicle:Dictionary=rides[i]
-			if not vehicle.arrived and pos.x>=vehicle.start and pos.x<vehicle.start+30 and absf(pos.y-float(vehicle.ground_y))<48:
+			var approach:=22.0 if vehicle.type=="ride" else 0.0
+			if not vehicle.arrived and pos.x>=vehicle.start-approach and pos.x<vehicle.start+30 and absf(pos.y-float(vehicle.ground_y))<48:
 				active_ride=i
 				mounted=vehicle.type
+				if mounted=="ride": events.append("boar_call")
 				break
 	if active_ride>=0:
 		var adjustment:=BOAR_SPEED_ADJUSTMENT if mounted=="ride" else .08
 		axis=RIDE_CRUISE+axis*adjustment
 	grab_lock=maxf(0,grab_lock-dt)
 	time += dt
+	var was_in_gorilla_intro:=gorilla_intro_active()
 	update_devices(dt)
+	if was_in_gorilla_intro or gorilla_intro_active():
+		vel=Vector2.ZERO
+		buffer=0.0
+		track_keeper(dt)
+		return
 	update_structures()
 	update_planks(dt)
 	update_platforms()
 	if ladder>=0:
 		ladder_step(dt,axis)
-		if struck_by_rock(): fail_crossing(true)
+		if not gorilla.is_empty() and hits_gorilla(gorilla): fail_crossing(true,true)
+		elif struck_by_rock(): fail_crossing(true)
 		track_keeper(dt)
 		return
 	if ledge>=0:
 		climb_step(dt,axis,jump)
-		if struck_by_structure() or struck_by_rock() or devices.any(func(d): return d.type=="gorilla" and hits_gorilla(d)):
-			fail_crossing(true)
+		var grabbed:=not gorilla.is_empty() and hits_gorilla(gorilla)
+		if grabbed or struck_by_structure() or struck_by_rock():
+			fail_crossing(true,grabbed)
 			return
 		track_keeper(dt)
 		return
@@ -995,7 +1093,8 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 	if grounded>=0 and platforms[grounded].style=="rocker":
 		var slope:=float(devices[platforms[grounded].device].tilt)
 		slide_speed=signf(slope)*maxf(0.0,absf(slope)-.24)*170.0
-	vel.x = move_toward(vel.x, axis*SPEED+slide_speed, dt*(1250 if is_grounded() else 760))
+	var pace:=RIDE_SPEED if active_ride>=0 else (SPEED if is_grounded() else AIR_SPEED)
+	vel.x = move_toward(vel.x, axis*pace+slide_speed, dt*(1250 if is_grounded() else 760))
 	if absf(axis)>0.01:
 		face = 1 if axis>0 else -1
 	near_crate=false
@@ -1102,6 +1201,8 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 			gate.key_taken=true
 			events.append("engage")
 	var struck := struck_by_structure() or struck_by_rock()
+	var grabbed:=not gorilla.is_empty() and hits_gorilla(gorilla)
+	struck=struck or grabbed
 	for i in devices.size():
 		var d: Dictionary = devices[i]
 		if d.type=="elephant":
@@ -1113,8 +1214,6 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 			if d.mode==2 and absf(pos.x-float(d.foot_x))<46 and pos.y>float(d.y)-64 and pos.y-BODY<float(d.y):
 				struck=true
 		elif d.type=="spikes" and hits_spikes(d):
-			struck=true
-		elif d.type=="gorilla" and hits_gorilla(d):
 			struck=true
 		elif d.type=="cable_drum" and d.mode==2:
 			var center:=Vector2(d.roll_x,float(d.y)-DRUM_RADIUS)
@@ -1142,7 +1241,7 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 				elif d.mode==2:
 					chamber_jump=true
 	if pos.y > minf(496,camera_y+570) or submerged or struck:
-		fail_crossing(struck)
+		fail_crossing(struck,grabbed)
 		return
 	near_station = -1
 	var next:=completed.size()
@@ -1156,9 +1255,16 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 		finish = true
 	track_keeper(dt)
 
-func fail_crossing(struck: bool) -> void:
-	death_timer=0.68
-	events.append("splash" if not struck and grounded==-1 else "impact")
+func fail_crossing(struck: bool, by_gorilla := false) -> void:
+	if by_gorilla:
+		death_timer=GORILLA_SLAM_TIME
+		gorilla.mode=GorillaMode.SLAM
+		if int(gorilla.rope)>=0:
+			gorilla.chase.y=chase_ropes[gorilla.rope].deck_y
+			gorilla.rope=-1
+	else:
+		death_timer=0.68
+		events.append("splash" if not struck and grounded==-1 else "impact")
 	ledge=-1
 	ladder=-1
 

@@ -13,6 +13,7 @@ var touched: Array = []
 var touch_device := false
 var button_scale := 1.0
 const SKIP_SCENE_RECT := Rect2(822,14,45,43)
+var controls_locked := false
 var scene_skip_enabled := false
 var replay := false
 var title_gradient: GradientTexture2D
@@ -39,6 +40,7 @@ func zones() -> Dictionary:
 		"use":Vector2(960-34-139*button_scale,y),"jump":Vector2(960-34-44*button_scale,y-13*button_scale)}
 
 func zone_at(p: Vector2) -> String:
+	if controls_locked: return ""
 	if scene_skip_enabled and SKIP_SCENE_RECT.has_point(p): return "skip_scene"
 	for key in zones():
 		if p.distance_to(zones()[key]) <= button_scale*(44 if key=="jump" else 40): return key
@@ -57,26 +59,28 @@ func _draw() -> void:
 			draw_texture_rect(header_gradient,Rect2(0,0,960,111),false)
 			draw_string(MONO,Vector2(29,30),Book.chapter_label(route.room),HORIZONTAL_ALIGNMENT_LEFT,-1,13,BRASS)
 			draw_string(SERIF,Vector2(28,62),Book.ROOMS[route.room][0],HORIZONTAL_ALIGNMENT_LEFT,-1,29,PAPER)
-			var pause_rect := Rect2(881,14,45,43)
-			draw_rect(pause_rect,Color(.06,.11,.12,.58))
-			for x in [898,906]:
-				draw_line(Vector2(x,27),Vector2(x,45),PAPER,3,true)
-			if scene_skip_enabled:
-				draw_rect(SKIP_SCENE_RECT,Color(.06,.11,.12,.70))
-				draw_rect(SKIP_SCENE_RECT,BRASS,false,1)
-				var center := SKIP_SCENE_RECT.get_center()
-				for x in [-11,-3]:
-					var start := center+Vector2(x,0)
-					draw_colored_polygon(PackedVector2Array([start+Vector2(0,-7),start+Vector2(8,0),start+Vector2(0,7)]),BRASS)
-				draw_line(center+Vector2(9,-7),center+Vector2(9,7),BRASS,2,true)
-			draw_controls()
+			if not controls_locked:
+				var pause_rect := Rect2(881,14,45,43)
+				draw_rect(pause_rect,Color(.06,.11,.12,.58))
+				for x in [898,906]:
+					draw_line(Vector2(x,27),Vector2(x,45),PAPER,3,true)
+				if scene_skip_enabled:
+					draw_rect(SKIP_SCENE_RECT,Color(.06,.11,.12,.70))
+					draw_rect(SKIP_SCENE_RECT,BRASS,false,1)
+					var center := SKIP_SCENE_RECT.get_center()
+					for x in [-11,-3]:
+						var start := center+Vector2(x,0)
+						draw_colored_polygon(PackedVector2Array([start+Vector2(0,-7),start+Vector2(8,0),start+Vector2(0,7)]),BRASS)
+					draw_line(center+Vector2(9,-7),center+Vector2(9,7),BRASS,2,true)
+				draw_controls()
 			if intro>0:
 				var alpha := minf(1.0,intro)
 				var width0 := minf(690,SERIF.get_string_size(notice,HORIZONTAL_ALIGNMENT_LEFT,-1,23).x+42)
 				draw_rect(Rect2((960-width0)/2,88,width0,40),Color(.06,.12,.13,.83*alpha))
 				draw_string(SERIF,Vector2((960-width0)/2,115),notice,HORIZONTAL_ALIGNMENT_CENTER,width0,23,Color(PAPER,alpha))
 			if route.death_timer>0:
-				draw_rect(Rect2(0,0,960,540),Color(.04,.09,.11,clampf(route.death_timer*.9,0,.5)))
+				var opacity:=.26 if route.gorilla.get("mode")==Passage.GorillaMode.SLAM else .5
+				draw_rect(Rect2(0,0,960,540),Color(.04,.09,.11,clampf(route.death_timer*.9,0,opacity)))
 			var context := ""
 			var gate:=route.nearby_key_gate()
 			if route.ladder>=0:
@@ -97,6 +101,8 @@ func _draw() -> void:
 				context="Jump to chamber II"
 			elif route.mounted=="ride" and route.pos.x<560:
 				context="Left slows the boar. Right speeds it up. Jump the gaps."
+			elif route.boar_road and route.active_ride<0:
+				context="Walk up to the tethered boar"
 			elif route.near_crate:
 				context="Hold the hand + move" if touch_device else "Hold E + move to shift cargo"
 			elif route.room==0 and route.pos.x<230:

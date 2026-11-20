@@ -68,7 +68,7 @@ const VOYAGE := [
 	["The Breakwater",preload("res://art/breakwater.webp"),4,7,
 		"The tide breaks against the outer stones.",[
 		[133,"The Cable Drum",-65,"gorilla_run chase_planks gap @6a cable_drum wide_causeway"],
-		[134,"The Gull Roost",-85,"@7a hound_spikes monkey_ladder"],
+		[134,"The Gull Roost",-85,"gorilla_continue @7a hound_spikes monkey_ladder"],
 	]],
 	["The Lantern Cage",preload("res://art/reach14.webp"),14,7,
 		"Rain taps the metal steps like a second pair of boots.",[
@@ -78,7 +78,7 @@ const VOYAGE := [
 	["The Storm Beacon",preload("res://art/reach13.webp"),13,7,
 		"Above the fog there is only the wind, and the turning sea.",[
 		[137,"The Winding Floor",-192,"@9a steam_spikes acid_gate"],
-		[138,"The Seaward Face",-205,"gorilla_run hound chase_planks gap"],
+		[138,"The Seaward Face",-205,"hound chase_planks gap"],
 		[144,"The Mercury Bath",-222,"@15a rocker_skiff shutters"],
 		[148,"The Lantern Door",-259,"@18a swarm_planks monkey_ladder"],
 		[149,"Light the Fairway",-301,"@p10 gantry @l10 ray summit"],
@@ -137,7 +137,7 @@ const STATION_BOARDS := {
 	88: {"10a":"l1"},
 	96: {"16a":"f2"},
 	129: {"3a":"p2"},
-	134: {"7a":"s2"},
+	135: {"p9":"s2"},
 	144: {"15a":"w2"},
 	149: {"l10":"chart2"},
 }

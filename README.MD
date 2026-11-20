@@ -30,17 +30,17 @@ The hound and spikes each get their own scene in The Tidal Quays. The Pumpworks 
 
 Wait for the green acid to stop falling before crossing the drain. At a low passage, run through when the roof lifts. The final chapter combines both hazards. In The Night Watch, the keeper has to jump an oncoming hound while a swarm closes in from behind.
 
-In **The Brass Ladder**, climb down to collect the key, then return to the catwalk and use Hand to open the door. In **The Lantern Door**, keep climbing while the monkey aims rocks at you.
+In **The Brass Ladder**, climb down to collect the key, then return to the catwalk and use Hand to open the door. In **The Lantern Door**, the monkey throws as soon as you grab the ladder. Time your climb around the stone crossing the middle rungs.
 
-In **The Seaward Face**, a gorilla chases the keeper from entrance to exit. Jump the charging hound, cross five breakable planks, and clear the last gap. A swarm buzzes as it approaches, and a monkey calls before throwing. Footsteps follow the surface beneath the keeper.
+In **The Cable Drum**, a gorilla walks in from the left and beats its chest before giving chase. It swings over the breakable planks and gap on ropes, then pursues the keeper through **The Gull Roost**. In **The Seaward Face**, jump the charging hound, cross five breakable planks, and clear the last gap. A swarm buzzes as it approaches, and a monkey calls when it attacks. Footsteps follow the surface beneath the keeper.
 
-Every crossing in the final storm appears earlier. Practice the acid gate in **The Blind Landing**, the gorilla chase in **The Cable Drum**, and the monkey-guarded ladder in **The Gull Roost**. In **The Night Watch**, passing the first monkey starts an ambush from two perches.
+Every crossing in the final storm appears earlier. Practice the acid gate in **The Blind Landing** and the monkey-guarded ladder in **The Gull Roost**. In **The Night Watch**, passing the first monkey starts an ambush from two perches.
 
-In The Freightyard, jump from a sagging cargo net before it drops and take shelter on a bollard as a cable drum rolls underneath. The rock-throwing monkey appears in Mangrove Canopy, and the grazing elephant gives chase in The Limestone Cut. One boar carries the keeper through three scenes in Boar Run. Hold left to slow the boar or right to speed it up. Release the button to return to cruising speed. The Engine Galleries begin on foot.
+In The Freightyard, jump from a sagging cargo net before it drops and take shelter on a bollard as a cable drum rolls underneath. The rock-throwing monkey appears in Mangrove Canopy, and the grazing elephant gives chase in The Limestone Cut. Walk up to the tethered boar at Bracken Gate to start Boar Run. Hold left to slow it or right to speed it up. Release the button to return to cruising speed. The Engine Galleries begin on foot.
 
 See the [chapter contents](docs/chapter-contents.md) for new and former chapter numbers, the [chapter editor](docs/chapter-editor.html) for counts, and the [component image index](docs/component-images/00-component-index.png) for each playable component.
 
-The campaign uses eight types of puzzle. Plot a course through buoys, switch a relay grid, balance the bell, route a mirror beam, push freight, join pressure pipes, clear a skiff channel, and meter sluice water. The workshop opens all eight from the title screen. Use **Next layout** to browse all 66 boards at any time.
+The campaign uses eight types of puzzle. Plot a course through buoys, switch a relay grid, balance the bell, route a mirror beam, push freight, join pressure pipes, clear a skiff channel, and meter sluice water. The workshop opens all eight from the title screen. Use **Next layout** to browse all 66 boards at any time. Set the keeper name to `SHA2027` in Settings to show **Skip puzzle** on campaign and workshop boards.
 
 ![Platform materials across the voyage](docs/chapter-materials.webp)
 
