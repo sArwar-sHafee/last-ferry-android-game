@@ -12,7 +12,7 @@ config_version=5
 
 config/name="The Last Ferry"
 config/description="A ferry keeper's journey through a drowned signal station."
-config/version="1.6.7"
+config/version="1.6.8"
 run/main_scene="res://scenes/main.tscn"
 config/quit_on_go_back=false
 config/features=PackedStringArray("4.7", "GL Compatibility")
@@ -23,11 +23,6 @@ config/icon="res://art/beacon.png"
 window/size/viewport_width=960
 window/size/viewport_height=540
 window/stretch/mode="canvas_items"
-
-[ferry]
-
-testing/open_chapters=true
-testing/scene_skip=true
 
 [rendering]
 

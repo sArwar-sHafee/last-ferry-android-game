@@ -10,6 +10,7 @@ var ended := false
 var cleared: Array = []
 var sound := true
 var button_percent := 100
+var keeper_name := ""
 var puzzle_wait := 0.0
 var puzzle_turn := 0
 var played := 0.0
@@ -48,6 +49,7 @@ func _init(file := "user://harbor.cfg") -> void:
 	puzzle_turn=maxi(0,int(cfg.get_value("voyage","puzzle_turn",0)))
 	button_percent=clampi(roundi(float(cfg.get_value("settings","button_percent",100))/25)*25,75,150)
 	sound = bool(cfg.get_value("settings","sound",true))
+	keeper_name = str(cfg.get_value("settings","keeper_name",""))
 
 func store() -> void:
 	var cfg := ConfigFile.new()
@@ -60,6 +62,7 @@ func store() -> void:
 	cfg.set_value("voyage","cleared",cleared)
 	cfg.set_value("settings","sound",sound)
 	cfg.set_value("settings","button_percent",button_percent)
+	cfg.set_value("settings","keeper_name",keeper_name)
 	cfg.set_value("voyage","puzzle_wait",puzzle_wait)
 	cfg.set_value("voyage","puzzle_turn",puzzle_turn)
 	var tmp := path+".new"

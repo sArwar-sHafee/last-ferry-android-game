@@ -120,6 +120,8 @@ func pilot(r: Passage) -> Array:
 func run_room(index: int) -> void:
 	# The game itself loads the following room on reaching its exit.
 	if not check(game.route!=null and game.route.room==index,"normal room transition "+str(index)): return
+	if Book.CHAPTER_STARTS.has(index):
+		check(Logbook.new().opened>=Book.chapter(index),"story progress unlocks the chapter when its entrance is reached")
 	var r:=game.route
 	landing=-1
 	var dt:=1.0/60.0
@@ -657,6 +659,46 @@ func chamber_transfer_checks() -> void:
 					if r.grounded==i+1 or r.death_timer>0: break
 				check(r.grounded==i+1 and r.death_timer==0,"jump lands on the rising second float in room "+str(room))
 
+func menu_button(caption: String) -> Button:
+	for node in game.hud.get_children():
+		if node is Button and node.text==caption: return node
+	return null
+
+func chapter_progress_checks() -> void:
+	if check(menu_button("Support")!=null,"Support appears on the title screen"):
+		menu_button("Support").pressed.emit()
+		check(game.screen=="support" and menu_button("Star on GitHub")!=null,"Support opens GitHub support options")
+		game.back()
+	game.open_credits("menu")
+	check(game.hud.get_children().any(func(node): return node is Label and "sArwar_sHafee" in node.text),
+		"the credits use the GitHub display name")
+	game.set_screen("chapters")
+	check(game.hud.get_children().filter(func(node): return node is Button).size()==3,
+		"only chapter one and the navigation actions appear on a fresh install")
+	game.play_chapter(1)
+	check(game.screen=="chapters" and game.route==null,"locked chapters cannot be opened directly")
+	game.play_chapter(0)
+	game.enter_room(Book.CHAPTER_STARTS[1]-1,[])
+	game.room_finished()
+	var saved:=Logbook.new()
+	check(game.screen=="chapters" and saved.opened==1 and not saved.active,
+		"completing the first chapter from the picker unlocks chapter two independently of the story checkpoint")
+
+func developer_name_checks() -> void:
+	game.open_settings("menu")
+	var name_input:LineEdit=game.hud.get_children().filter(func(node): return node is LineEdit)[0]
+	for value in ["sha2027","SHA2027 "," SHA2027","SHA2027X"]:
+		name_input.text_changed.emit(value)
+		check(not game.hud.scene_skip_enabled,"developer mode requires an exact name match")
+	name_input.text_changed.emit("SHA2027")
+	check(game.hud.scene_skip_enabled,"the exact keeper name activates developer mode")
+	game.back()
+	check(Logbook.new().keeper_name=="SHA2027","leaving settings saves the keeper name")
+	var fresh:=Main.new()
+	root.add_child(fresh)
+	check(fresh.hud.scene_skip_enabled,"developer mode is restored with the keeper name")
+	fresh.queue_free()
+
 func debug_skip_checks() -> void:
 	var last_in_chapter:int=Book.CHAPTER_STARTS[1]-1
 	game.enter_room(last_in_chapter,[])
@@ -674,7 +716,7 @@ func debug_skip_checks() -> void:
 	game.last_skip_frame=-1
 	touch(0,skip_button,true)
 	touch(0,skip_button,false)
-	check(game.route.room==last_in_chapter+2,"on-screen R advances the scene")
+	check(game.route.room==last_in_chapter+2,"the skip icon advances the scene")
 	var after:=Logbook.new()
 	check(after.room==saved.room and after.cleared==saved.cleared and after.opened==saved.opened,
 		"debug skips leave the main voyage save intact")
@@ -728,11 +770,33 @@ func debug_chapter_checks() -> void:
 	r.step(1.0/60,0,false,false)
 	check(r.held_crate<0,"release returns to walking pose")
 
+func disable_developer_checks() -> void:
+	game.chapter_page=2
+	game.open_settings("menu")
+	var name_input:LineEdit=game.hud.get_children().filter(func(node): return node is LineEdit)[0]
+	name_input.text_changed.emit("Keeper")
+	game.back()
+	game.set_screen("chapters")
+	var last_earned_page:=floori(float(game.logbook.opened)/game.CHAPTERS_PER_PAGE)
+	check(game.chapter_page==last_earned_page and Logbook.new().keeper_name=="Keeper","renaming restores the earned chapter list")
+	game.new_game()
+	var key:=InputEventKey.new()
+	key.keycode=KEY_R
+	key.pressed=true
+	game._input(key)
+	var skip_target:=game.hud.SKIP_SCENE_RECT.get_center()
+	check(game.hud.zone_at(skip_target).is_empty(),"the skip icon is hidden for a regular keeper name")
+	touch(0,skip_target,true)
+	touch(0,skip_target,false)
+	check(game.route.room==0 and not game.replay,"skip taps and shortcuts cannot advance a regular voyage")
+
 func run() -> void:
 	game=Main.new()
 	root.add_child(game)
 	game.set_physics_process(false)
 	game.set_process(false)
+	chapter_progress_checks()
+	game.leave_voyage()
 	lifecycle_checks()
 	checkpoint_checks()
 	boards=game.board_specs
@@ -742,8 +806,10 @@ func run() -> void:
 	terrain_checks()
 	vehicle_checks()
 	chamber_transfer_checks()
+	developer_name_checks()
 	debug_skip_checks()
 	debug_chapter_checks()
+	disable_developer_checks()
 	for index in Book.ROOMS.size():
 		run_room(index)
 	check(gameplay_seconds>=3600,"full voyage contains at least one hour of tested traversal")

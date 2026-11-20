@@ -9,6 +9,8 @@ const Logbook = preload("res://scripts/logbook.gd")
 const Soundscape = preload("res://scripts/soundscape.gd")
 const SERIF = preload("res://art/fonts/Yrsa-Medium.ttf")
 const MONO = preload("res://art/fonts/LiberationMono-Regular.ttf")
+const GITHUB_REPO := "https://github.com/sArwar-sHafee/last-ferry-android-game"
+const DEVELOPER_NAME := "SHA2027"
 var scenery := Scenery.new()
 var hud := Hud.new()
 var audio := Soundscape.new()
@@ -23,6 +25,7 @@ var credits_return := "menu"
 var active_station := -1
 var fingers := {}
 var replay := false
+var replay_can_unlock := false
 var jump_request := false
 var key_grip := false
 var mouse_grip := ""
@@ -39,16 +42,18 @@ const CHAPTERS_PER_PAGE := 9
 var practice_pages := {}
 var practicing := false
 var workshop_return := "menu"
+var saved_keeper_name := ""
 
 func _ready() -> void:
 	add_child(scenery)
 	add_child(hud)
-	hud.scene_skip_enabled=ProjectSettings.get_setting("ferry/testing/scene_skip",false)
 	hud.touch_device=OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
 	add_child(audio)
 	board_specs = JSON.parse_string(FileAccess.get_file_as_string("res://art/schematics.json"))
 	board_specs.merge(Book.NEW_BOARDS)
 	logbook = Logbook.new()
+	saved_keeper_name=logbook.keeper_name
+	update_keeper_name(saved_keeper_name)
 	hud.button_scale=logbook.button_percent/100.0
 	audio.set_enabled(logbook.sound)
 	update_safe_area()
@@ -82,6 +87,7 @@ func clear_input() -> void:
 	hud.touched = []
 
 func set_screen(next: String) -> void:
+	if screen=="settings": save_keeper_name()
 	screen = next
 	if next in ["menu","chapters","aim","final"]: audio.accent.stop()
 	audio.accent.stream_paused=next!="play"
@@ -111,6 +117,7 @@ func set_screen(next: String) -> void:
 		"workshop": workshop()
 		"aim": aim_ui()
 		"credits": credits()
+		"support": support()
 		"licenses": licenses()
 		"final": final_page()
 
@@ -130,6 +137,17 @@ func menu() -> void:
 		hud.button(hud,Rect2(54,425,108,43),"New game",ask_new)
 	hud.button(hud,Rect2(174 if continuing else 54,425,106,43),"Settings",func(): open_settings("menu"))
 	hud.button(hud,Rect2(292 if continuing else 173,425,94,43),"Credits",func(): open_credits("menu"))
+	hud.button(hud,Rect2(398 if continuing else 279,425,112,43),"Support",func(): set_screen("support"))
+
+func support() -> void:
+	title("THE LAST FERRY","Support the game")
+	hud.label(hud,Rect2(56,157,660,72),"Star The Last Ferry on GitHub to support the project.",ThemeDB.fallback_font,21,hud.PAPER,true)
+	var status := hud.label(hud,Rect2(56,287,660,45),"",ThemeDB.fallback_font,17,hud.MUTE,true)
+	var open_github := func():
+		if OS.shell_open(GITHUB_REPO)!=OK:
+			status.text="Couldn’t open GitHub. Look for sArwar-sHafee/last-ferry-android-game."
+	hud.button(hud,Rect2(56,239,198,48),"Star on GitHub",open_github,true)
+	hud.button(hud,Rect2(56,422,130,47),"Back",func(): set_screen("menu"))
 
 func ask_new() -> void:
 	if logbook.active and not logbook.ended:
@@ -240,17 +258,46 @@ func open_settings(from: String) -> void:
 
 func settings() -> void:
 	title("KEEPER'S LOG","Settings")
-	hud.label(hud,Rect2(56,167,400,41),"Harbor sounds and music",SERIF,29)
-	hud.button(hud,Rect2(490,167,137,46),"Sound on" if logbook.sound else "Sound off",toggle_sound,true)
-	hud.label(hud,Rect2(56,232,400,44),"Touch button size",SERIF,29)
-	var smaller:=hud.button(hud,Rect2(490,232,60,46),"−",resize_controls.bind(-25))
+	hud.label(hud,Rect2(56,144,400,41),"Harbor sounds and music",SERIF,29)
+	hud.button(hud,Rect2(490,144,137,44),"Sound on" if logbook.sound else "Sound off",toggle_sound,true)
+	hud.label(hud,Rect2(56,199,400,44),"Touch button size",SERIF,29)
+	var smaller:=hud.button(hud,Rect2(490,199,60,44),"−",resize_controls.bind(-25))
 	smaller.disabled=logbook.button_percent<=75
-	hud.label(hud,Rect2(569,232,83,46),"%d%%" % logbook.button_percent,MONO,19)
-	var larger:=hud.button(hud,Rect2(650,232,60,46),"+",resize_controls.bind(25))
+	hud.label(hud,Rect2(569,199,83,44),"%d%%" % logbook.button_percent,MONO,19)
+	var larger:=hud.button(hud,Rect2(650,199,60,44),"+",resize_controls.bind(25))
 	larger.disabled=logbook.button_percent>=150
-	hud.label(hud,Rect2(56,296,843,53),"Jump toward a ledge to catch it. Hold toward it or tap jump to pull up. Move away to drop. Hold the hand while moving to shift cargo.",ThemeDB.fallback_font,17,hud.MUTE,true)
-	hud.label(hud,Rect2(56,344,740,44),"Keyboard    A / D or arrows · Space to jump · E to use · Esc to pause",ThemeDB.fallback_font,16,hud.MUTE,true)
-	hud.button(hud,Rect2(56,427,130,47),"Back",func(): set_screen(settings_return))
+	hud.label(hud,Rect2(56,254,400,44),"Keeper name",SERIF,29)
+	var keeper_name := LineEdit.new()
+	keeper_name.position=Vector2(490,254)
+	keeper_name.size=Vector2(220,44)
+	keeper_name.placeholder_text="Enter your name"
+	keeper_name.text=logbook.keeper_name
+	keeper_name.add_theme_stylebox_override("normal",hud.skin(hud.BOARD,hud.MUTE))
+	keeper_name.add_theme_stylebox_override("focus",hud.skin(Color.TRANSPARENT,hud.BRASS))
+	keeper_name.add_theme_color_override("font_color",hud.PAPER)
+	keeper_name.add_theme_font_size_override("font_size",19)
+	hud.add_child(keeper_name)
+	var developer_status := hud.label(hud,Rect2(724,254,200,44),"Developer mode active",MONO,13,hud.BRASS)
+	developer_status.visible=hud.scene_skip_enabled
+	keeper_name.text_changed.connect(func(value: String):
+		update_keeper_name(value)
+		developer_status.visible=hud.scene_skip_enabled)
+	keeper_name.text_submitted.connect(func(_value: String):
+		save_keeper_name()
+		keeper_name.release_focus())
+	keeper_name.focus_exited.connect(save_keeper_name)
+	hud.label(hud,Rect2(56,312,843,53),"Jump toward a ledge to catch it. Hold toward it or tap jump to pull up. Move away to drop. Hold the hand while moving to shift cargo.",ThemeDB.fallback_font,17,hud.MUTE,true)
+	hud.label(hud,Rect2(56,365,740,44),"Keyboard    A / D or arrows · Space to jump · E to use · Esc to pause",ThemeDB.fallback_font,16,hud.MUTE,true)
+	hud.button(hud,Rect2(56,435,130,47),"Back",func(): set_screen(settings_return))
+
+func update_keeper_name(value: String) -> void:
+	logbook.keeper_name=value
+	hud.scene_skip_enabled=value==DEVELOPER_NAME
+
+func save_keeper_name() -> void:
+	if logbook.keeper_name==saved_keeper_name: return
+	logbook.store()
+	saved_keeper_name=logbook.keeper_name
 
 func resize_controls(change: int) -> void:
 	logbook.button_percent=clampi(logbook.button_percent+change,75,150)
@@ -266,20 +313,23 @@ func toggle_sound() -> void:
 
 func chapters() -> void:
 	title("KEEPER'S LOG","Chapters")
-	var page_count:=ceili(float(Book.CHAPTERS.size())/CHAPTERS_PER_PAGE)
+	var available:=Book.CHAPTERS.size() if hud.scene_skip_enabled else logbook.opened+1
+	var page_count:=ceili(float(available)/CHAPTERS_PER_PAGE)
+	chapter_page=clampi(chapter_page,0,page_count-1)
 	var first:=chapter_page*CHAPTERS_PER_PAGE
-	for i in range(first,mini(first+CHAPTERS_PER_PAGE,Book.CHAPTERS.size())):
+	for i in range(first,mini(first+CHAPTERS_PER_PAGE,available)):
 		var cell:=i-first
 		var x := 56+(cell%3)*286
 		var y := 146+floori(cell/3.0)*65
 		var b := hud.button(hud,Rect2(x,y,272,54),"%02d     %s" % [i+1,Book.chapter_name(i)],play_chapter.bind(i))
-		b.disabled = i>logbook.opened and not ProjectSettings.get_setting("ferry/testing/open_chapters",false)
-		b.tooltip_text="Complete the preceding chapter to unlock." if b.disabled else "Replay from the chapter entrance."
-		if b.disabled: b.modulate=Color(.63,.67,.66,.8)
+		b.tooltip_text="Play from the chapter entrance."
+	if available<Book.CHAPTERS.size() and chapter_page==page_count-1:
+		hud.label(hud,Rect2(56,356,822,42),"Finish this chapter to unlock the next." if available==1 else "Finish your latest chapter to unlock the next.",ThemeDB.fallback_font,17,hud.MUTE,true)
 	hud.button(hud,Rect2(56,437,130,47),"Back",func(): set_screen("menu"))
-	hud.button(hud,Rect2(210,437,87,47),"Previous",turn_chapter_page.bind(-1)).disabled=chapter_page==0
-	hud.label(hud,Rect2(314,437,110,47),"Page %d / %d" % [chapter_page+1,page_count],MONO,15,hud.PAPER)
-	hud.button(hud,Rect2(430,437,84,47),"Next",turn_chapter_page.bind(1)).disabled=chapter_page==page_count-1
+	if page_count>1:
+		hud.button(hud,Rect2(210,437,87,47),"Previous",turn_chapter_page.bind(-1)).disabled=chapter_page==0
+		hud.label(hud,Rect2(314,437,110,47),"Page %d / %d" % [chapter_page+1,page_count],MONO,15,hud.PAPER)
+		hud.button(hud,Rect2(430,437,84,47),"Next",turn_chapter_page.bind(1)).disabled=chapter_page==page_count-1
 	hud.button(hud,Rect2(580,437,298,47),"Practice station puzzles",open_workshop.bind("chapters"))
 
 func turn_chapter_page(direction: int) -> void:
@@ -312,8 +362,11 @@ func practice_station(key: String) -> void:
 		break
 
 func play_chapter(index: int) -> void:
+	if index<0 or index>=Book.CHAPTERS.size(): return
+	if index>logbook.opened and not hud.scene_skip_enabled: return
 	route=null
 	replay=true
+	replay_can_unlock=not hud.scene_skip_enabled
 	replay_time=0
 	enter_room(Book.CHAPTER_STARTS[index],[])
 
@@ -323,7 +376,8 @@ func open_credits(from: String) -> void:
 
 func credits() -> void:
 	title("THE LAST FERRY","Credits")
-	hud.label(hud,Rect2(56,153,790,147),"Harbor paintings created with OpenAI ImageGen. Dog bark recorded by Amada44. Keeper animation, machinery, puzzles and music were made for this voyage.\n\nBuilt with Godot Engine. Typography uses Yrsa and Liberation Mono.",ThemeDB.fallback_font,19,hud.PAPER,true)
+	hud.label(hud,Rect2(56,151,790,48),"Created by sArwar_sHafee",SERIF,31,hud.BRASS)
+	hud.label(hud,Rect2(56,213,790,147),"Harbor paintings created with OpenAI ImageGen. Dog bark recorded by Amada44. Keeper animation, machinery, puzzles and music were made for this voyage.\n\nBuilt with Godot Engine. Typography uses Yrsa and Liberation Mono.",ThemeDB.fallback_font,19,hud.PAPER,true)
 	hud.button(hud,Rect2(56,388,140,49),"Back",func(): set_screen(credits_return))
 	hud.button(hud,Rect2(212,388,174,49),"Licenses",func(): set_screen("licenses"))
 
@@ -416,6 +470,10 @@ func room_finished() -> void:
 		scenery.arrival=0
 		set_screen("aim")
 	elif replay and Book.CHAPTER_STARTS.has(route.room+1):
+		var next_chapter:=Book.chapter(route.room+1)
+		if replay_can_unlock and next_chapter==logbook.opened+1:
+			logbook.opened=next_chapter
+			logbook.store()
 		route=null
 		scenery.route=null
 		hud.route=null
@@ -429,6 +487,7 @@ func debug_skip_scene() -> void:
 	var frame:=Engine.get_process_frames()
 	if frame==last_skip_frame: return
 	last_skip_frame=frame
+	replay_can_unlock=false
 	if not replay:
 		replay=true
 		replay_time=0.0
@@ -479,7 +538,7 @@ func back() -> void:
 		"credits": set_screen(credits_return)
 		"licenses": set_screen("credits")
 		"workshop": set_screen(workshop_return)
-		"chapters","confirm": set_screen("menu")
+		"chapters","confirm","support": set_screen("menu")
 		"final": leave_voyage()
 		"menu":
 			if OS.has_feature("android"): get_tree().quit()
@@ -513,7 +572,7 @@ func _input(event: InputEvent) -> void:
 					key_grip=true
 					use_nearby()
 				if event.keycode==KEY_P: pause_game()
-				if event.keycode==KEY_R:
+				if event.keycode==KEY_R and hud.scene_skip_enabled:
 					debug_skip_scene()
 					get_viewport().set_input_as_handled()
 			elif screen=="aim" and event.keycode in [KEY_E,KEY_ENTER,KEY_SPACE]:

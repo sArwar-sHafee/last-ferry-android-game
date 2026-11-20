@@ -50,7 +50,7 @@ func _draw() -> void:
 		"menu":
 			draw_texture_rect(title_gradient,Rect2(0,0,960,540),false)
 			draw_line(Vector2(52,119),Vector2(117,119),BRASS,2)
-		"pause","chapters","settings","credits","confirm","licenses","workshop":
+		"pause","chapters","settings","credits","confirm","licenses","workshop","support":
 			draw_rect(Rect2(0,0,960,540),Color(.035,.075,.085,.56 if screen=="pause" else .91))
 		"play":
 			if not route: return
@@ -64,7 +64,11 @@ func _draw() -> void:
 			if scene_skip_enabled:
 				draw_rect(SKIP_SCENE_RECT,Color(.06,.11,.12,.70))
 				draw_rect(SKIP_SCENE_RECT,BRASS,false,1)
-				draw_string(MONO,Vector2(822,42),"R",HORIZONTAL_ALIGNMENT_CENTER,45,19,BRASS)
+				var center := SKIP_SCENE_RECT.get_center()
+				for x in [-11,-3]:
+					var start := center+Vector2(x,0)
+					draw_colored_polygon(PackedVector2Array([start+Vector2(0,-7),start+Vector2(8,0),start+Vector2(0,7)]),BRASS)
+				draw_line(center+Vector2(9,-7),center+Vector2(9,7),BRASS,2,true)
 			draw_controls()
 			if intro>0:
 				var alpha := minf(1.0,intro)

@@ -19,13 +19,23 @@ func run() -> void:
 	game=Main.new()
 	root.add_child(game)
 	game.logbook.active=false
+	game.logbook.opened=0
+	game.update_keeper_name("")
 	game.set_screen("menu")
 	await capture("title")
+	game.set_screen("support")
+	await capture("support")
+	game.open_settings("menu")
+	await capture("settings")
+	game.set_screen("chapters")
+	await capture("chapters-fresh")
+	game.update_keeper_name(game.DEVELOPER_NAME)
 	game.set_screen("chapters")
 	await capture("chapters")
 	for page in [1,2]:
 		game.turn_chapter_page(1)
 		await capture("chapters-"+str(page+1))
+	game.update_keeper_name("")
 	game.new_game()
 	game.set_physics_process(false)
 	game.hud.fade=0
