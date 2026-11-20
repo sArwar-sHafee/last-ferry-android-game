@@ -58,3 +58,50 @@ body /= max(np.abs(body).max(), 1e-6)
 envelope = (1 - np.exp(-220*t))*np.exp(-17*t)
 hit = .61*body*envelope + .16*np.sin(2*np.pi*(89*t - 68*t*t))*envelope*np.exp(-14*t)
 save("impact", hit)
+
+# Game effects for the walking surfaces, insects, and primates.
+def attack_decay(t, attack, decay):
+    return (1-np.exp(-t*attack))*np.exp(-t*decay)
+
+
+t=timeline(.22)
+save("step_wood", (.35*tone(t,123)+.23*noise(t,1450))*attack_decay(t,430,28)
+     +.11*tone(t,279)*attack_decay(t,580,65))
+save("step_grass", .64*(noise(t,3500)-noise(t,650)*.65)*attack_decay(t,110,28)
+     +.12*tone(t,102)*attack_decay(t,240,38))
+save("step_stone", .43*noise(t,3600)*attack_decay(t,510,38)
+     +.25*tone(t,152)*attack_decay(t,350,46))
+save("step_clay", .45*noise(t,720)*attack_decay(t,250,24)
+     +.20*tone(t,78)*attack_decay(t,300,31))
+save("step_glass", (.19*tone(t,570)+.09*tone(t,887)+.06*tone(t,1268))*attack_decay(t,400,24)
+     +.3*noise(t,2700)*attack_decay(t,530,53))
+save("step_soft", .48*noise(t,1350)*attack_decay(t,142,21)
+     +.14*tone(t,68)*attack_decay(t,250,26))
+
+t=timeline(2)
+wings=[]
+for side in [-1,1]:
+    swarm = np.zeros_like(t)
+    for i, base in enumerate([184,211,243,259]):
+        phase=2*np.pi*(t*base+.35*np.sin(2*np.pi*t*(2+i*.5)+i+side*.25))
+        near=.55+.32*tone(t,1+i*.5)
+        swarm+=near*(np.sin(phase)+.45*np.sin(2*phase)+.20*np.sin(3*phase))
+    wings.append(swarm*.12)
+save("swarm_buzz",np.stack(wings,axis=1))
+
+t=timeline(.68)
+call=np.zeros_like(t)
+for onset, pitch in [(0,364),(.17,509),(.34,424)]:
+    x=np.maximum(0,t-onset)
+    phase=2*np.pi*(pitch*x+520*x*x+2*np.sin(2*np.pi*x*8))
+    rasp=np.sin(phase)+.36*np.sin(2*phase)+.18*np.sin(3*phase)
+    call+=.28*rasp*attack_decay(x,85,25)
+save("monkey_call",call+.17*noise(t,1300)*attack_decay(t,110,11))
+t=timeline(.18)
+save("rock_throw",.58*noise(t,3600)*attack_decay(t,34,31))
+
+t=timeline(.94)
+phase=2*np.pi*(67*t+19*t*t)+1.4*np.sin(2*np.pi*t*29)
+growl=.28*np.sin(phase)+.21*np.sin(2*phase)+.12*np.sin(3*phase)
+breath=.46*noise(t,1200)
+save("gorilla_call",(growl+breath)*attack_decay(t,26,4.4)*(1-.35*tone(t,8)))

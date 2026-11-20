@@ -78,7 +78,14 @@ func _draw() -> void:
 			if route.death_timer>0:
 				draw_rect(Rect2(0,0,960,540),Color(.04,.09,.11,clampf(route.death_timer*.9,0,.5)))
 			var context := ""
-			if route.ledge>=0 and route.pull_time<0:
+			var gate:=route.nearby_key_gate()
+			if route.ladder>=0:
+				context="Up / Down to climb · Hand to let go" if touch_device else "W / S to climb · E to let go"
+			elif gate>=0:
+				context=("Hand to unlock" if touch_device else "E to unlock") if route.key_gates[gate].key_taken else "The key is below the catwalk"
+			elif route.nearby_ladder()>=0:
+				context="Hand to grab the ladder" if touch_device else "E to grab the ladder"
+			elif route.ledge>=0 and route.pull_time<0:
 				context="Hold toward the ledge to climb"
 			elif route.ledge<0 and route.room==0 and route.pos.x>315 and route.pos.x<407:
 				context="Jump toward the high quay"
@@ -89,7 +96,7 @@ func _draw() -> void:
 			elif route.chamber_jump:
 				context="Jump to chamber II"
 			elif route.mounted=="ride" and route.pos.x<560:
-				context="The boar runs. Jump the breaks in the road."
+				context="Left slows the boar. Right speeds it up. Jump the gaps."
 			elif route.near_crate:
 				context="Hold the hand + move" if touch_device else "Hold E + move to shift cargo"
 			elif route.room==0 and route.pos.x<230:
@@ -107,12 +114,14 @@ func _draw() -> void:
 			draw_texture_rect(title_gradient,Rect2(0,0,960,540),false)
 
 func draw_controls() -> void:
+	var usable:=route.near_station>=0 or route.near_valve>=0 or route.nearby_ladder()>=0 or route.nearby_key_gate()>=0
 	for key in zones():
 		var p:Vector2=zones()[key]
-		draw_set_transform(p,0,Vector2.ONE*button_scale)
+		var rotation0:=-PI*.5 if route.ladder>=0 and key in ["left","right"] else 0.0
+		draw_set_transform(p,rotation0,Vector2.ONE*button_scale)
 		p=Vector2.ZERO
 		var radius := 36 if key=="jump" else 31
-		var lit: bool = key in touched or (key=="use" and (route.near_station>=0 or route.near_valve>=0))
+		var lit: bool = key in touched or (key=="use" and usable)
 		var ink := BRASS if lit else PAPER
 		draw_circle(p,radius,Color(.055,.10,.115,.78 if lit else .55),true,-1,true)
 		draw_arc(p,radius,0,TAU,60,Color(ink,.9 if lit else .61),1.5,true)

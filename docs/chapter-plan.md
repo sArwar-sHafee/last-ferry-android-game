@@ -1,28 +1,16 @@
-# The coastal voyage
+# The Last Ferry chapter plan
 
-The voyage has 94 scenes across 21 chapters. Each chapter lasts two to five scenes. Each chapter uses a different landscape illustration. Inland chapters use local ambience such as birds, machinery, insects, or cave echoes. The sea wall and harbor keep their surf. A short original score accompanies story text and fades when it clears. The chapter picker has three pages, and all chapters are open for debugging.
+The voyage has 40 scenes across 13 chapters. It starts with short crossings and isolated hazards, then asks the keeper to carry those skills into moving transfers, overlapping hazards, and the storm beacon.
 
-The table describes the eight regions that shape the route.
+| Chapters | Learning and escalation |
+| --- | --- |
+| 1–3 | Teach ledge grabs, skiffs, and breakable boards at the landing. Introduce spikes and the hound separately on the quay. Give the swarm, spider, and rock-throwing monkey separate encounters in the canopy. |
+| 4–5 | Teach the two-chamber lock, tilting bridge, and solo steam vent at the pumpworks. Wait for an acid discharge to stop before crossing the drain. Add a trolley, cable drum, and sinking cargo net in the freightyard. |
+| 6–8 | Mount for three scenes and leave the boar at the Engine Galleries. Follow solo vents with a vent and spike bed. Run under a lifting roof and board a skiff directly from a tilting bridge. Run from the elephant and cross four loose planks with a swarm behind you. |
+| 9–10 | Climb through light bridges, shutters, and cages into longer jumps. Retrieve the ladder key, jump from a tilting bridge to a skiff, and practice the acid gate and stepped ascent in daylight. |
+| 11–12 | Escape a slower gorilla over five loose planks and a gap, then climb past a monkey. In The Night Watch, escape the swarm and hound, time two shutters, and pass between two monkeys that throw from opposite sides. |
+| 13 | Run under a lifting roof between acid discharges. Escape a gorilla through a hound encounter, five loose planks, and a long jump. Take the widest bridge-to-skiff jump. Cross six loose planks with a swarm behind you, then climb past a rock-throwing monkey to reach the light. |
 
-| Region | Locations | Footing | What changes for the player |
-| --- | ---: | --- | --- |
-| I · The Landing | 12 | Solid tarred timber with iron straps | Learn ledge catches and test the longer jumps before the hound turns for its second pass. |
-| II · Mangrove Canopy | 11 | Grassy root mats and branches | Cross vines and broken limbs while insects follow through the canopy. |
-| III · The Sluice House | 12 | Blue-grey masonry | Raise the lock pontoon, balance on floats, and follow spillways. |
-| IV · The Upper Sidings | 12 | Riveted silver girders | Move ballast and board a waiting trolley. It stops on the far platform. |
-| V · Boar Run | 12 | Red clay over charcoal | Start mounted and jump spillways and breakable planks while avoiding spiders. The same boar carries the keeper through the road scenes. |
-| VI · Lantern Ridge | 11 | Jagged limestone shelves | Climb the ridge and find the next foothold under steady light. |
-| VII · The Lens Works | 12 | Sea-green leaded glass | Restore light bridges and pass through moving shutters. |
-| VIII · The Storm Beacon | 12 | Pale cloud banks with scalloped undersides | In the final chapter, the lamp casts a round glow with a steady center and a softly flickering edge. Forked lightning leaves a longer afterglow, with varied dark intervals between flashes. |
+The eight retired chapters were formerly numbered 3, 5, 7, 8, 10, 12, 15, and 17. Continue uses stable scene addresses and advances to the next retained entrance if the saved scene was retired.
 
-Chapter materials identify ordinary ground. Working mechanisms, fragile planks and vines keep recognizable silhouettes. The voyage has 13 tilting bridges with a 74-pixel gap at each end. Standard causeways have 32–49 pixel gaps. The eight wide causeways have brass edges and 72–88 pixel gaps. The main voyage has seven chamber transfers. Once aboard chamber I, tap the hand to start draining the first float and raising the second. Jump across before the first float sinks too far.
-
-## Field guide for the playable build
-
-| Creature | Where to find it | Behavior and player response |
-| --- | --- | --- |
-| Harbor hound | The Tarred Slip | A recorded bark warns of its charge. Jump the first pass. It pauses at a post, turns, and runs back at the same speed. |
-| Giant spider | Mangrove Canopy, with later encounters in the yard and galleries | Watch its eight-legged silhouette near the ground. Jump over its low body. It patrols between two limits at 110 pixels per second in either direction. |
-| Mosquito swarm | Mangrove Canopy, locations 5 and 9 | The insects lift behind the keeper and fly toward his upper body at 42 pixels per second. They follow over gaps and elevation changes until the location ends. Keep moving once they stir. Contact sends the keeper back to the checkpoint. |
-| Boar | All twelve locations of the boar country | The boar takes off along the charcoal road. Left eases the pace, right urges it on, and jump clears a cut in the road. Checkpoint lamps save progress without interrupting the ride. |
-
+[Current chapter numbering, scenes, and counts](chapter-contents.md)

@@ -12,7 +12,7 @@ config_version=5
 
 config/name="The Last Ferry"
 config/description="A ferry keeper's journey through a drowned signal station."
-config/version="1.6.8"
+config/version="1.7.0"
 run/main_scene="res://scenes/main.tscn"
 config/quit_on_go_back=false
 config/features=PackedStringArray("4.7", "GL Compatibility")

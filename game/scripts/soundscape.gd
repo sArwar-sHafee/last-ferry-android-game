@@ -4,12 +4,18 @@ var accent := AudioStreamPlayer.new()
 var cooldown := 0.0
 var amb := AudioStreamPlayer.new()
 var story := AudioStreamPlayer.new()
+var swarm_buzz := AudioStreamPlayer.new()
 var layers: Array[AudioStreamPlayer] = []
 var cursor := 0
 var ambience := ""
 var enabled := true
 var samples := {}
-const NAMES := ["estuary","pumphall","lantern","step","land","engage","splash","impact","ratchet","glass","flow","crate","save","signal","homecoming","pursuit","undertow","bark"]
+const NAMES := [
+	"estuary","pumphall","lantern","step","step_wood","step_grass","step_stone",
+	"step_clay","step_glass","step_soft","land","engage","splash","impact","ratchet",
+	"glass","flow","crate","save","signal","homecoming","pursuit","undertow","bark",
+	"monkey_call","rock_throw","gorilla_call",
+]
 
 func _ready() -> void:
 	for key in NAMES:
@@ -18,6 +24,10 @@ func _ready() -> void:
 	accent.volume_db=-5
 	add_child(story)
 	story.stream=preload("res://audio/story.ogg")
+	add_child(swarm_buzz)
+	var buzz: AudioStreamOggVorbis=preload("res://audio/swarm_buzz.ogg")
+	buzz.loop=true
+	swarm_buzz.stream=buzz
 	add_child(amb)
 	amb.volume_db = -4
 	for i in 6:
@@ -41,6 +51,7 @@ func set_enabled(value: bool) -> void:
 		accent.stop()
 		story.stop()
 		amb.stop()
+		swarm_buzz.stop()
 		for voice in layers: voice.stop()
 	elif amb.stream != null:
 		amb.play()
@@ -65,13 +76,23 @@ func cue(key: String) -> void:
 	var voice := layers[cursor]
 	cursor = (cursor+1)%layers.size()
 	voice.stream = samples[key]
-	voice.pitch_scale = randf_range(.89,1.1) if key in ["step","land","ratchet","crate"] else 1.0
+	var stepping:=key.begins_with("step")
+	voice.pitch_scale = randf_range(.89,1.1) if stepping or key in ["land","ratchet","crate","monkey_call"] else 1.0
 	match key:
-		"step": voice.volume_db=-11
 		"splash": voice.volume_db=-10
-		"land","impact": voice.volume_db=-5
-		_: voice.volume_db=0
+		"land": voice.volume_db=-5
+		"impact": voice.volume_db=-3
+		"monkey_call","rock_throw": voice.volume_db=-6
+		"gorilla_call": voice.volume_db=-4
+		_: voice.volume_db=-11 if stepping else 0
 	voice.play()
+
+func update_swarm(distance: float) -> void:
+	if not enabled or distance>=280:
+		if swarm_buzz.playing: swarm_buzz.stop()
+		return
+	swarm_buzz.volume_db=lerpf(-13,-35,smoothstep(12,280,distance))
+	if not swarm_buzz.playing: swarm_buzz.play()
 
 func tick(dt: float) -> void:
 	cooldown=maxf(0,cooldown-dt)

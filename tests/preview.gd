@@ -32,7 +32,7 @@ func run() -> void:
 	game.update_keeper_name(game.DEVELOPER_NAME)
 	game.set_screen("chapters")
 	await capture("chapters")
-	for page in [1,2]:
+	for page in range(1,ceili(float(game.Book.CHAPTERS.size())/game.CHAPTERS_PER_PAGE)):
 		game.turn_chapter_page(1)
 		await capture("chapters-"+str(page+1))
 	game.update_keeper_name("")
@@ -52,7 +52,7 @@ func run() -> void:
 		r.climb_step(.24,1,true)
 		await capture("mantle")
 		break
-	game.enter_room(game.Book.legacy_index(1),["s2"])
+	game.enter_room(game.Book.migrated_room(6),["4a"])
 	r=game.route
 	for d in r.devices:
 		if d.type!="hound": continue
@@ -69,6 +69,8 @@ func run() -> void:
 		await capture("hound")
 		break
 	# Reverse the same grip without moving the camera to compare the two poses.
+	game.enter_room(game.Book.migrated_room(5),["s2"])
+	r=game.route
 	var box:Dictionary=r.freight[0]
 	r.spawn()
 	r.pos=Vector2(box.x-35,box.y)
@@ -91,7 +93,7 @@ func run() -> void:
 			r.pos=Vector2(deck.pos)+Vector2(deck.w*.5,0)
 			await capture("hoist-left" if phase==0 else "hoist-right")
 		break
-	game.enter_room(game.Book.legacy_index(2),["s3"])
+	game.enter_room(game.Book.migrated_room(34),["7a"])
 	r=game.route
 	for d in r.devices:
 		if d.type!="steam": continue
@@ -103,7 +105,7 @@ func run() -> void:
 		game.hud.fade=0
 		await capture("vent")
 		break
-	for index in [25,148]:
+	for index in [31,148]:
 		game.enter_room(game.Book.migrated_room(index),[])
 		r=game.route
 		var deck:Dictionary=r.platforms[1]
@@ -113,7 +115,7 @@ func run() -> void:
 		game.hud.intro=0
 		game.hud.fade=0
 		game.hud.button_scale=1
-		await capture("low-water" if index==25 else "upper-tower")
+		await capture("low-water" if index==31 else "upper-tower")
 	for shot in [["canopy",21,.46],["boar",68,.18],["cave",94,.50],["lightning",144,.30],["storm-afterglow",144,.30],["storm-dark",144,.30],["storm-dark-left",144,.30],["storm-walk-a",144,.30],["storm-walk-b",144,.30]]:
 		game.enter_room(game.Book.migrated_room(shot[1]),[])
 		r=game.route

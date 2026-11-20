@@ -1,8 +1,20 @@
-# Version 1.5 playtest
+# The Last Ferry playtests
+
+## Version 1.7.0
+
+The Godot pilot completed all 39 scenes and eight scheduled puzzles, then opened the credits. It logged 460.2 seconds of uninterrupted traversal and zero recoveries. The suite also checked chapter unlocks, the last boar-to-foot transition, and Continue from both a retained checkpoint and a retired scene.
+
+A separate fixed-step rehearsal used the public touch controls and pointer input. It reached the credits after 476.5 seconds of active game time and 67 station pointer presses. Human play times include reading, deciding how to cross, and solving the panels.
+
+The chapter editor opened all 13 chapters and saved and exported a change to a combined encounter count. The Android 1.7.0 package passed v2 and v3 signature verification, 16 KB alignment, and the SHA-256 check. The export omits the retired chapter backdrops and their unused ambience.
+
+[Chapter landscapes](chapter-materials.webp) · [Component index](component-images/00-component-index.png)
+
+## Earlier 1.5 playtest
 
 The Godot pilot reached the credits through all 94 locations and nine scheduled puzzles in 3,698.5 seconds of simulated traversal (61 minutes 39 seconds rounded), with zero failures. The test opened and finished each of the eight chapter replays. Separate ride checks covered both the trolley and the boar waiting at the boarding point, moving with the keeper, holding position during pause, and staying parked after dismount.
 
-Godot rendered each chapter’s ordinary ground for visual inspection. [Eight chapter materials](chapter-materials.webp)
+Godot rendered each chapter’s ordinary ground for visual inspection.
 
 An Android emulator upgraded the existing installation to version 1.5.0 (build 6), opened the eight-chapter picker, entered Boar Run, and paused at Bracken Gate. The boar was visible on the clay platform before boarding. [Android screenshots](android15.webp)
 

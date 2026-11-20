@@ -93,6 +93,7 @@ func set_screen(next: String) -> void:
 	audio.accent.stream_paused=next!="play"
 	if next in ["menu","chapters","aim","final"]: audio.story.stop()
 	audio.story.stream_paused=next!="play"
+	if next!="play": audio.update_swarm(INF)
 	audio.amb.volume_db=-11 if next in ["pause","settings","console"] else -4
 	hud.screen = next
 	hud.clear_children()
@@ -166,8 +167,6 @@ func new_game() -> void:
 	logbook.active = true
 	logbook.ended = false
 	logbook.played = 0
-	logbook.puzzle_wait=0
-	logbook.puzzle_turn=0
 	horn_count = 0
 	enter_room(0,[])
 
@@ -192,14 +191,8 @@ func enter_room(index: int, cleared: Array) -> void:
 			known.append(key)
 	var prior:=route
 	route = Passage.new(index,known)
-	var continuing_ride:=prior!=null and prior.finish and index==prior.room+1 and route.boar_road and prior.boar_road
+	var continuing_ride:=prior!=null and prior.finish and index==prior.room+1 and route.boar_road and prior.boar_road and Book.chapter(index)==Book.chapter(prior.room)
 	if continuing_ride: route.continue_boar(prior)
-	if replay:
-		route.puzzle_wait=prior.puzzle_wait if prior else 0.0
-		route.puzzle_turn=prior.puzzle_turn if prior else Book.chapter(index)
-	else:
-		route.puzzle_wait=logbook.puzzle_wait
-		route.puzzle_turn=logbook.puzzle_turn
 	scenery.route = route
 	hud.route = route
 	hud.replay = replay
@@ -207,6 +200,7 @@ func enter_room(index: int, cleared: Array) -> void:
 	hud.fade=0.0 if continuing_ride else .40
 	hud.intro = 5.5 if not hud.notice.is_empty() else 0.0
 	audio.surround(Book.CHAPTERS[Book.chapter(index)][3])
+	audio.update_swarm(INF)
 	audio.play_story(hud.intro)
 	if not replay:
 		logbook.room = index
@@ -219,8 +213,6 @@ func enter_room(index: int, cleared: Array) -> void:
 
 func checkpoint() -> void:
 	if not replay and route:
-		logbook.puzzle_turn=route.puzzle_turn
-		logbook.puzzle_wait=route.puzzle_wait
 		logbook.room = route.room
 		logbook.cleared = route.completed.duplicate()
 		logbook.store()
@@ -403,6 +395,7 @@ func licenses() -> void:
 
 func use_nearby() -> void:
 	if screen!="play": return
+	if route.use_key_gate() or route.toggle_ladder(): return
 	if route.operate_valve(): return
 	open_station()
 
@@ -410,7 +403,7 @@ func open_station() -> void:
 	if screen!="play" or route.near_station<0: return
 	active_station=route.near_station
 	practicing=false
-	show_board(Book.board_for(route.puzzle_turn),route.room)
+	show_board(route.stations[active_station].board,route.room)
 
 func show_board(key: String,index: int) -> void:
 	console=Console.new()
@@ -597,6 +590,7 @@ func _input(event: InputEvent) -> void:
 			fingers[event.index]=key
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
+		if event.device==InputEvent.DEVICE_ID_EMULATION: return
 		if event.pressed:
 			mouse_grip=hud.zone_at(hud.get_global_transform().affine_inverse()*event.position)
 			trigger_zone(mouse_grip)
@@ -617,12 +611,16 @@ func _physics_process(dt: float) -> void:
 	hud.touched=keys
 	var left := Input.is_physical_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT) or keys.has("left")
 	var right := Input.is_physical_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT) or keys.has("right")
+	if route.ladder>=0:
+		left=left or Input.is_physical_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)
+		right=right or Input.is_physical_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_SPACE) or keys.has("jump")
 	route.step(dt,float(right)-float(left),jump_request,key_grip or keys.has("use"))
 	jump_request=false
 	if route.room==0 and not replay and horn_count<3 and route.elapsed>1.0+horn_count*2.85:
 		audio.cue("signal")
 		horn_count+=1
 	audio.tick(dt)
+	audio.update_swarm(route.swarm_distance())
 	for msg in route.events:
 		match msg:
 			"checkpoint": checkpoint()

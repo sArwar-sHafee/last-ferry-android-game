@@ -2,6 +2,8 @@ extends RefCounted
 
 const Book = preload("res://scripts/campaign.gd")
 const SPEED := 165.0
+const RIDE_CRUISE := .92
+const BOAR_SPEED_ADJUSTMENT := .16
 const JUMP := 335.0
 const HAND_REACH := 41.0
 const PULL_TIME := 0.52
@@ -10,6 +12,16 @@ const RADIUS := 8.0
 const ROCKER_MAX_SLOPE := .68
 const ROCKER_GAP := 74.0
 const BODY := 40.0
+const LADDER_SPEED := 100.0
+const CULVERT_PERIOD := 4.8
+const SPIKE_COUNT := 3
+const SPIKE_PITCH := 14.0
+const SPIKE_HEIGHT := 24.0
+const THROW_WINDUP := .55
+const ROCK_GRAVITY := 640.0
+const ROCK_RADIUS := 5.0
+const DRUM_RADIUS := 21.0
+const GROUND_STEPS := ["step_wood","step_grass","step_stone","step","step_clay","step_stone","step_glass","step_soft"]
 var room: int
 var rides: Array = []
 var boar_road := false
@@ -20,8 +32,9 @@ var stations: Array = []
 var freight: Array = []
 var structures: Array = []
 var devices: Array = []
-var puzzle_wait := 0.0
-var puzzle_turn := 0
+var ladders: Array = []
+var key_gates: Array = []
+var ladder := -1
 var ledge := -1
 var ledge_face := 1
 var hang_time := 0.0
@@ -65,6 +78,7 @@ func _init(index: int, cleared: Array = []) -> void:
 	checkpoint.y=_y
 	var exit_height:=Book.deck_height(index+1)
 	var tokens:=str(Book.ROOMS[index][1]).split(" ")
+	var boards: Dictionary=Book.STATION_BOARDS.get(Book.SOURCE_ROOMS[index],{})
 	boar_road=tokens.has("ride")
 	dock(165)
 	for i in tokens.size():
@@ -74,7 +88,7 @@ func _init(index: int, cleared: Array = []) -> void:
 		var token := String(raw)
 		if token.begins_with("@"):
 			_key = token.substr(1)
-			stations.append({"x":_x+76, "y":_y, "key":_key})
+			stations.append({"x":_x+76, "y":_y, "key":_key, "board":boards.get(_key,"")})
 			dock(215)
 			if completed.has(_key):
 				checkpoint = Vector2(_x-110, _y)
@@ -84,6 +98,9 @@ func _init(index: int, cleared: Array = []) -> void:
 	terrace_to(exit_height)
 	dock(170)
 	width = _x
+	for device in devices:
+		if device.type=="gorilla" and not stations.is_empty():
+			device.chase_end=float(stations[0].x)
 	if boar_road:
 		rides.append({"start":checkpoint.x,"end":width,"type":"ride","position":checkpoint,
 			"ground_y":checkpoint.y,"arrived":false})
@@ -175,7 +192,7 @@ func build_section(token: String) -> void:
 			_x+=60
 			dock(112,"viaduct")
 			terrace_to(bank)
-		"rocker":
+		"rocker","rocker_skiff":
 			dock(74)
 			_x+=ROCKER_GAP
 			var span:=174.0
@@ -183,7 +200,14 @@ func build_section(token: String) -> void:
 			devices.append({"type":"rocker","x":_x+span*.5,"y":center_y,"tilt":0.0,"half_span":span*.5})
 			platform(_x,center_y,span,"rocker")
 			platforms.back().device=devices.size()-1
-			_x+=span+ROCKER_GAP
+			_x+=span
+			if token=="rocker_skiff":
+				# The skiff is the landing. Board it during its approach to the tilted end.
+				var extra_gap:=clampf((Book.chapter(room)-6)*2.0,0,12)
+				platform(_x+46+extra_gap,_y+18,91,"skiff",Vector2(141,0),1.03)
+				_x+=333+extra_gap
+			else:
+				_x+=ROCKER_GAP
 			dock(103)
 		"gantry":
 			# A vertical cage rises to a landing well above normal jump reach.
@@ -207,6 +231,15 @@ func build_section(token: String) -> void:
 			platform(_x+4,_y+4,66,"vine",Vector2(108,-12),1.12)
 			_x+=180
 			dock(90,"branch")
+		"cargo_net":
+			dock(112)
+			_x+=56
+			devices.append({"type":token,"x":_x+28,"y":_y,"amount":0.0,"timer":0.0,
+				"platform":platforms.size(),"hold_time":1.0 if Book.chapter(room)>=11 else 1.25})
+			platform(_x,_y+8,56,token,Vector2(0,102))
+			platforms.back().device=devices.size()-1
+			_x+=105
+			dock(130)
 		"ride","trolley":
 			var start:=_x
 			dock(135,"rail")
@@ -229,22 +262,82 @@ func build_section(token: String) -> void:
 				_x+=75
 			_x+=32
 			dock(93)
-		"swarm":
-			devices.append({"type":"swarm","x":_x,"y":_y-36,"flight":Vector2(_x-110,_y-64),"mode":0})
-			dock(155)
-		"hound","spider":
+		"swarm","swarm_planks":
+			var chasing:=token=="swarm_planks"
+			var anchor:=_x+42 if chasing else _x
+			add_swarm(anchor,152.0 if chasing else 54.0)
+			if chasing: plank_run(room+section_number,4 if Book.chapter(room)<12 else 6)
+			else: dock(155)
+		"gorilla_run":
+			# Start both runners on the same deck, with room to see the pursuer.
+			checkpoint.x=_x+21
+			devices.append({"type":"gorilla","x":checkpoint.x-152,"y":_y,
+				"chase":Vector2(checkpoint.x-152,_y),"mode":0,"call_timer":0.0,"chase_end":INF})
+			dock(280)
+		"chase_planks":
+			plank_run(1,5)
+		"elephant":
+			var home:=_x+126
+			devices.append({"type":token,"x":home,"y":_y,"foot_x":home,"start":_x+52,
+				"end":_x+678,"mode":0,"timer":0.0,"facing":1})
+			dock(742)
+		"spikes":
+			spike_bed(_x+112)
+			dock(224,"stone")
+		"monkey":
+			add_monkey(_x+255,_y)
+			dock(510)
+		"monkey_crossfire":
+			var rear:=_x+146
+			var trigger:=rear+20
+			add_monkey(rear,_y,-1,trigger)
+			add_monkey(rear+219,_y,-1,trigger)
+			dock(535)
+		"key_ladder":
+			var lower:=_y+130
+			dock(112,"catwalk")
+			var shaft:=_x+18
+			_x+=36
+			platform(shaft-42,lower,172,"catwalk")
+			add_ladder(shaft,_y,lower,_x+16,shaft+13)
+			key_gates.append({"x":shaft+145,"y":_y,"key_pos":Vector2(shaft+87,lower-18),
+				"checkpoint":"ladder-exit","key_taken":false,"open":false})
+			dock(218,"catwalk")
+		"monkey_ladder":
+			var lower:=_y
+			dock(153,"catwalk")
+			var shaft:=_x-17
+			platform(_x,lower,155,"catwalk")
+			_x+=12
+			_y-=126
+			add_ladder(shaft,_y,lower,_x+7,shaft+12)
+			add_monkey(shaft+114,lower,ladders.size()-1)
+			dock(230,"catwalk")
+		"cable_drum":
+			var later:=Book.chapter(room)>=10
+			devices.append({"type":token,"x":_x+355,"y":_y,"trigger":_x+48,"end":_x+23,
+				"roll_x":_x+355,"mode":0,"timer":0.0,"warning":.43 if later else .6,
+				"speed":255.0 if later else 236.0})
+			platform(_x+152,_y-47,49,"bollard")
+			dock(450,"rail")
+		"hound","hound_spikes","swarm_hound","spider":
 			var start:=_x
 			dock(960,"rail")
+			if token=="swarm_hound": add_swarm(start+42,162.0,start+925)
 			var kennel:=start+408
-			devices.append({"type":token,"x":kennel,"y":_y,"limit":start+45,"far_post":start+925,"dog":kennel,
+			devices.append({"type":"spider" if token=="spider" else "hound","x":kennel,"y":_y,"limit":start+45,"far_post":start+925,"dog":kennel,
 				"mode":0,"timer":0.0,"facing":-1,"speed":110.0 if token=="spider" else 262.0+9*(room%4)})
+			if token=="hound_spikes": spike_bed(start+273)
 			dock(75)
-		"steam","vents":
+		"steam","steam_spikes","vents":
 			dock(65)
 			var count:=2 if token=="vents" else 1
 			for i in count:
 				devices.append({"type":"steam","x":_x+79,"y":_y,"phase":i*1.95,"cycle":0.0,"mode":0})
 				dock(165,"rail")
+			if token=="steam_spikes":
+				spike_bed(_x+9)
+				dock(66,"rail")
 			dock(45)
 		"gap":
 			dock(54)
@@ -289,9 +382,10 @@ func build_section(token: String) -> void:
 			platform(_x+7,_y,178,"span")
 			_x += 192
 			dock(88)
-		"low", "drain":
-			structures.append({"x":_x+36,"y":_y-50,"w":115,"type":token,"key":_key})
+		"low","drain","acid_gate":
 			_y += 32
+			structures.append({"x":_x+36,"w":115.0,"floor":_y,"y":_y-82,"type":token,
+				"moving":token!="drain","cycle":0.0,"acid_mode":0})
 			dock(214,"drain")
 			_y -= 32
 			dock(86,"stone")
@@ -319,7 +413,7 @@ func build_section(token: String) -> void:
 			dock(74)
 		"shutters":
 			dock(92)
-			var gates:=1+(room+section_number)%3
+			var gates:=clampi(Book.chapter(room)-9,1,3)
 			for gate in gates:
 				var offset:=gate*(1.8+.22*(room%3))
 				devices.append({"type":"shutter","x":_x+83,"y":_y,"offset":offset,"mode":0,"amount":1.0})
@@ -338,6 +432,21 @@ func build_section(token: String) -> void:
 			dock(75,"stone")
 			_y -= 30
 			dock(180,"stone")
+
+func spike_bed(x: float) -> void:
+	devices.append({"type":"spikes","x":x,"y":_y})
+
+func add_swarm(x: float,speed: float,end := INF) -> void:
+	devices.append({"type":"swarm","x":x,"y":_y-36,"flight":Vector2(x-110,_y-64),
+		"speed":speed,"end":end,"mode":0})
+
+func add_monkey(x: float,y: float,target_ladder := -1,trigger := -INF) -> void:
+	devices.append({"type":"monkey","x":x,"y":y,"target_ladder":target_ladder,
+		"mode":0,"timer":0.0,"facing":-1,"rocks":[],"trigger":trigger,"alerted":false})
+
+func add_ladder(x: float,top: float,bottom: float,upper_x: float,lower_x: float) -> void:
+	ladders.append({"x":x,"top":top,"bottom":bottom,"upper_landing":Vector2(upper_x,top),
+		"lower_landing":Vector2(lower_x,bottom)})
 
 func continue_boar(previous: RefCounted) -> void:
 	if not boar_road or not previous.boar_road: return
@@ -359,6 +468,7 @@ func spawn() -> void:
 			ride.position=Vector2(ride.end if ride.arrived else ride.start,ride.ground_y)
 	chamber_jump=false
 	pos = checkpoint
+	ladder=-1
 	ledge=-1
 	pull_time=-1
 	grab_lock=0
@@ -377,6 +487,9 @@ func spawn() -> void:
 		if p.style=="loose": p.timer=-1.0
 	for item in freight:
 		item.x = item.spawn
+	for gate in key_gates:
+		gate.key_taken=false
+		gate.open=completed.has(gate.checkpoint)
 	for device in devices:
 		device.mode=0
 		if device.type in ["hound","spider"]:
@@ -385,6 +498,26 @@ func spawn() -> void:
 			device.timer=0.0
 		elif device.type=="swarm":
 			device.flight=Vector2(device.x-110,device.y-28)
+		elif device.type=="gorilla":
+			var passed: bool=checkpoint.x>=float(device.chase_end)
+			device.mode=2 if passed else 0
+			device.chase=Vector2(device.x,device.y) if passed else Vector2(checkpoint.x-152,checkpoint.y)
+			device.call_timer=0.0
+		elif device.type=="elephant":
+			device.foot_x=device.x
+			device.facing=1
+			device.timer=0.0
+		elif device.type=="monkey":
+			device.rocks.clear()
+			device.facing=-1
+			device.timer=0.0
+			device.alerted=false
+		elif device.type=="cargo_net":
+			device.amount=0.0
+			device.timer=0.0
+		elif device.type=="cable_drum":
+			device.roll_x=device.x
+			device.timer=0.0
 		elif device.type=="rocker":
 			device.tilt=0.0
 		elif device.type=="lockpair":
@@ -394,6 +527,7 @@ func spawn() -> void:
 			device.amount=0.0
 	near_valve=-1
 	valve_action=""
+	update_structures()
 	update_platforms()
 	camera_y=vertical_view()
 	camera = clampf(pos.x-275, 0, maxf(0,width-960))
@@ -402,12 +536,32 @@ func update_devices(dt: float) -> void:
 	for d in devices:
 		match d.type:
 			"swarm":
-				if d.mode==1 or (pos.x>=float(d.x)-70 and pos.x<float(d.x)+75):
+				if d.mode==2 or pos.x>=float(d.end):
+					d.mode=2
+					d.flight=Vector2(d.flight).move_toward(Vector2(float(d.end)+90,float(d.y)-140),105*dt)
+				elif d.mode==1 or (pos.x>=float(d.x)-70 and pos.x<float(d.x)+75):
 					d.mode=1
-					d.flight=Vector2(d.flight).move_toward(pos+Vector2(0,-24+6*sin(time*4)),42*dt)
+					d.flight=Vector2(d.flight).move_toward(pos+Vector2(0,-24+6*sin(time*4)),float(d.speed)*dt)
 				else: d.mode=0
 			"hound","spider":
 				update_hound(d,dt)
+			"elephant":
+				update_elephant(d,dt)
+			"gorilla":
+				update_gorilla(d,dt)
+			"monkey":
+				update_monkey(d,dt)
+			"cargo_net":
+				if d.timer>0:
+					d.timer=maxf(0,float(d.timer)-dt)
+				elif grounded==int(d.platform):
+					if d.amount==0: events.append("crate")
+					d.amount=move_toward(float(d.amount),1.0,dt/float(d.hold_time))
+					if d.amount==1: d.timer=.9
+				else:
+					d.amount=move_toward(float(d.amount),0.0,dt*.85)
+			"cable_drum":
+				update_cable_drum(d,dt)
 			"rocker":
 				var load:=0.0
 				if grounded>=0 and platforms[grounded].style=="rocker" and devices[platforms[grounded].device]==d:
@@ -431,6 +585,150 @@ func update_devices(dt: float) -> void:
 				d.second=move_toward(float(d.second),1.0 if feeding_second else 0.0,dt*.95)
 			"shutter":
 				d.amount=clampf((sin((time+float(d.offset))*1.22)+.24)*2.8,0,1)
+
+func update_structures() -> void:
+	for roof in structures:
+		var cycle:=fposmod(time,CULVERT_PERIOD)
+		roof.cycle=cycle
+		if roof.moving:
+			var lift:=smoothstep(.85,1.5,cycle)*(1.0-smoothstep(3.10,3.80,cycle))
+			roof.y=float(roof.floor)-lerpf(18,92,lift)
+		if roof.type!="low":
+			var discharge:=2.75 if roof.moving else 2.60
+			var acid_mode:=0
+			if cycle>=discharge and cycle<3.95: acid_mode=2
+			elif cycle>=discharge-.55 and cycle<discharge: acid_mode=1
+			if acid_mode!=int(roof.acid_mode) and absf(pos.x-float(roof.x))<245:
+				if acid_mode==1: events.append("ratchet")
+				elif acid_mode==2: events.append("flow")
+			roof.acid_mode=acid_mode
+
+func roof_bounds(roof: Dictionary) -> Rect2:
+	var top:=float(roof.floor)-118 if roof.moving else float(roof.y)
+	return Rect2(roof.x,top,roof.w,float(roof.y)+15-top)
+
+func acid_bounds(roof: Dictionary) -> Rect2:
+	var outlet:=float(roof.floor)-70
+	return Rect2(float(roof.x)+18,outlet,float(roof.w)-36,float(roof.floor)-outlet)
+
+func struck_by_structure() -> bool:
+	var keeper:=Rect2(pos-Vector2(RADIUS,BODY),Vector2(2*RADIUS,BODY))
+	for roof in structures:
+		if roof.moving and keeper.intersects(roof_bounds(roof)): return true
+		if roof.acid_mode==2 and keeper.intersects(acid_bounds(roof)): return true
+	return false
+
+func update_cable_drum(d: Dictionary,dt: float) -> void:
+	match int(d.mode):
+		0:
+			if pos.x>=float(d.trigger) and pos.x<float(d.x) and absf(pos.y-float(d.y))<85:
+				d.mode=1
+				d.timer=d.warning
+				events.append("ratchet")
+		1:
+			d.timer-=dt
+			if d.timer<=0:
+				d.mode=2
+				events.append("crate")
+		2:
+			d.roll_x=move_toward(float(d.roll_x),float(d.end),float(d.speed)*dt)
+			if d.roll_x==d.end: d.mode=3
+
+func update_elephant(d: Dictionary,dt: float) -> void:
+	match int(d.mode):
+		1: # Lift its head before charging.
+			d.timer-=dt
+			if d.timer<=0: d.mode=2
+		2:
+			var target:=clampf(pos.x,float(d.start),float(d.end))
+			if target!=d.foot_x: d.facing=signf(target-float(d.foot_x))
+			d.foot_x=move_toward(float(d.foot_x),target,190.0*dt)
+			if d.foot_x==target and pos.x!=target: d.mode=3
+		3: # The keeper has escaped. Walk back to the grass.
+			d.facing=signf(float(d.x)-float(d.foot_x))
+			d.foot_x=move_toward(float(d.foot_x),float(d.x),84.0*dt)
+			if is_equal_approx(float(d.foot_x),float(d.x)):
+				d.mode=0
+				d.facing=1
+
+func update_gorilla(d: Dictionary,dt: float) -> void:
+	if d.mode==2: return
+	if pos.x>=float(d.chase_end):
+		d.mode=2
+		return
+	var lead:=pos.x-float(d.chase.x)
+	var pace:=clampf(149.0+(lead-44.0)*.24,149.0,174.0)
+	if is_finite(float(d.chase_end)): pace-=9.0
+	d.chase.x=minf(pos.x,float(d.chase.x)+pace*dt)
+	var ahead:=Vector2.ZERO
+	var behind:=Vector2(0,d.y)
+	for p in platforms:
+		if not is_solid(p): continue
+		ahead=Vector2(p.pos)
+		if float(d.chase.x)<ahead.x:
+			# Leap across gaps and the planks that have already broken behind the keeper.
+			var progress:=inverse_lerp(behind.x,ahead.x,float(d.chase.x))
+			var rise:=minf((ahead.x-behind.x)*.44,61.0)
+			d.chase.y=lerpf(behind.y,ahead.y,progress)-sin(PI*progress)*rise
+			break
+		behind=Vector2(ahead.x+float(p.w),ahead.y)
+		if float(d.chase.x)<=behind.x:
+			d.chase.y=move_toward(float(d.chase.y),ahead.y,320*dt)
+			break
+	d.call_timer-=dt
+	if d.call_timer<=0:
+		d.call_timer=4.6
+		events.append("gorilla_call")
+
+func swarm_distance() -> float:
+	var distance:=INF
+	if death_timer>0 or finish: return distance
+	for d in devices:
+		if d.type=="swarm" and d.mode==1:
+			distance=minf(distance,Vector2(d.flight).distance_to(pos-Vector2(0,22)))
+	return distance
+
+func hits_gorilla(d: Dictionary) -> bool:
+	var feet:=Vector2(d.chase)
+	return d.mode!=2 and absf(pos.x-feet.x)<40 and pos.y>feet.y-70 and pos.y-BODY<feet.y
+
+func update_monkey(d: Dictionary,dt: float) -> void:
+	for i in range(d.rocks.size()-1,-1,-1):
+		var rock:Dictionary=d.rocks[i]
+		rock.pos+=rock.velocity*dt+Vector2.DOWN*(.5*ROCK_GRAVITY*dt*dt)
+		rock.velocity.y+=ROCK_GRAVITY*dt
+		if rock.pos.y>=float(d.y)-ROCK_RADIUS: d.rocks.remove_at(i)
+	d.timer=maxf(0,float(d.timer)-dt)
+	if not d.alerted:
+		if pos.x<float(d.trigger): return
+		d.alerted=true
+	if (d.target_ladder>=0 and ladder!=d.target_ladder) or absf(pos.x-float(d.x))>235 or absf(pos.y-float(d.y))>125:
+		d.mode=0
+		return
+	d.facing=1 if pos.x>=float(d.x) else -1
+	if d.timer>0: return
+	if d.mode==0:
+		d.mode=1
+		d.timer=THROW_WINDUP
+		events.append("monkey_call")
+	else:
+		var hand:=Vector2(float(d.x)+d.facing*15,float(d.y)-93)
+		var flight_time:=.68+absf(pos.x-hand.x)*.001
+		var target:=pos-Vector2(0,BODY*.5)
+		var velocity:=(target-hand)/flight_time-Vector2.DOWN*(.5*ROCK_GRAVITY*flight_time)
+		d.rocks.append({"pos":hand,"velocity":velocity})
+		events.append("rock_throw")
+		d.mode=0
+		d.timer=1.3
+
+func hits_spikes(d: Dictionary) -> bool:
+	if pos.y-BODY>=float(d.y): return false
+	for tooth in SPIKE_COUNT:
+		var tip_x:=float(d.x)+(tooth-(SPIKE_COUNT-1)*.5)*SPIKE_PITCH
+		var gap:=maxf(0,absf(pos.x-tip_x)-RADIUS)
+		if gap<SPIKE_PITCH*.5 and pos.y>float(d.y)-SPIKE_HEIGHT*(1.0-2*gap/SPIKE_PITCH):
+			return true
+	return false
 
 func update_hound(d: Dictionary,dt: float) -> void:
 	# A sentry works the stretch between two posts. At either end it plants
@@ -501,6 +799,8 @@ func update_platforms() -> void:
 			var d: Dictionary = devices[p.device]
 			if p.style=="chamber":
 				weight = d.first if int(p.side)==0 else d.second
+			elif p.style=="cargo_net":
+				weight = float(d.amount)*float(d.amount)
 			else: weight = d.amount
 		p.pos = Vector2(p.base) + Vector2(p.delta)*weight
 
@@ -512,6 +812,7 @@ func surface_height(p: Dictionary,x: float) -> float:
 
 func is_solid(p: Dictionary) -> bool:
 	if p.style=="loose": return float(p.timer)<.74
+	if p.style=="cargo_net": return float(devices[p.device].amount)<1
 	return not (p.style in ["span","ray"] and not completed.has(p.key))
 
 func collide_side(left: float, right: float, top: float, previous: float, dir: int) -> void:
@@ -544,7 +845,7 @@ func catch_ledge(axis: float) -> void:
 		var landing_box:=Rect2(edge-Vector2(RADIUS,BODY),Vector2(RADIUS*2,BODY))
 		var blocked:=false
 		for roof in structures:
-			if landing_box.intersects(Rect2(roof.x,roof.y,roof.w,15)): blocked=true
+			if landing_box.intersects(roof_bounds(roof)): blocked=true
 		if blocked: continue
 		ledge=i
 		ledge_face=side
@@ -578,10 +879,68 @@ func climb_step(dt: float,axis: float,jump: bool) -> void:
 		ledge=-1
 		grace=.11
 		pull_time=-1
-		events.append("step")
+		events.append(footstep())
 
 func needs_console(index: int) -> bool:
-	return not boar_road and index==completed.size() and puzzle_wait<=0.0
+	return index==completed.size() and index<stations.size() and not str(stations[index].board).is_empty()
+
+func nearby_ladder() -> int:
+	if death_timer>0 or active_ride>=0 or ledge>=0: return -1
+	for i in ladders.size():
+		var rungs: Dictionary=ladders[i]
+		if absf(pos.x-float(rungs.x))<=36 and pos.y>=float(rungs.top)-12 and pos.y<=float(rungs.bottom)+10:
+			return i
+	return -1
+
+func toggle_ladder() -> bool:
+	if death_timer>0: return false
+	if ladder>=0:
+		ladder=-1
+		return true
+	ladder=nearby_ladder()
+	if ladder<0: return false
+	var rungs: Dictionary=ladders[ladder]
+	pos=Vector2(rungs.x,clampf(pos.y,float(rungs.top),float(rungs.bottom)))
+	vel=Vector2.ZERO
+	grounded=-1
+	grace=0.0
+	buffer=0.0
+	return true
+
+func ladder_step(dt: float,axis: float) -> void:
+	var rungs: Dictionary=ladders[ladder]
+	pos.y=clampf(pos.y-axis*LADDER_SPEED*dt,float(rungs.top),float(rungs.bottom))
+	if axis>0 and pos.y==float(rungs.top):
+		pos=rungs.upper_landing
+		ladder=-1
+	elif axis<0 and pos.y==float(rungs.bottom):
+		pos=rungs.lower_landing
+		ladder=-1
+
+func nearby_key_gate() -> int:
+	if death_timer>0 or ladder>=0: return -1
+	for i in key_gates.size():
+		var gate: Dictionary=key_gates[i]
+		if not gate.open and absf(pos.x-float(gate.x))<=36 and absf(pos.y-float(gate.y))<42:
+			return i
+	return -1
+
+func use_key_gate() -> bool:
+	var index:=nearby_key_gate()
+	if index<0: return false
+	var gate: Dictionary=key_gates[index]
+	if gate.key_taken:
+		gate.open=true
+		events.append("engage")
+	return true
+
+func struck_by_rock() -> bool:
+	var body:=Rect2(pos-Vector2(RADIUS,BODY),Vector2(RADIUS*2,BODY)).grow(ROCK_RADIUS)
+	for d in devices:
+		if d.type!="monkey": continue
+		for rock in d.rocks:
+			if body.has_point(rock.pos): return true
+	return false
 
 func vertical_view() -> float:
 	return minf(0.0,pos.y-272)
@@ -607,15 +966,25 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 				active_ride=i
 				mounted=vehicle.type
 				break
-	if active_ride>=0: axis=.92+axis*.08
-	puzzle_wait=maxf(0,puzzle_wait-dt)
+	if active_ride>=0:
+		var adjustment:=BOAR_SPEED_ADJUSTMENT if mounted=="ride" else .08
+		axis=RIDE_CRUISE+axis*adjustment
 	grab_lock=maxf(0,grab_lock-dt)
 	time += dt
 	update_devices(dt)
+	update_structures()
 	update_planks(dt)
 	update_platforms()
+	if ladder>=0:
+		ladder_step(dt,axis)
+		if struck_by_rock(): fail_crossing(true)
+		track_keeper(dt)
+		return
 	if ledge>=0:
 		climb_step(dt,axis,jump)
+		if struck_by_structure() or struck_by_rock() or devices.any(func(d): return d.type=="gorilla" and hits_gorilla(d)):
+			fail_crossing(true)
+			return
 		track_keeper(dt)
 		return
 	if grounded >= 0:
@@ -644,6 +1013,10 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 			box.x=next_x
 			break
 	pos.x = clampf(pos.x+vel.x*dt, RADIUS+1, width-25)
+	for gate in key_gates:
+		if gate.open: continue
+		var door_x:=float(gate.x)
+		pos.x=minf(pos.x,door_x-RADIUS) if old_x<door_x else maxf(pos.x,door_x+RADIUS)
 	var dir := signi(roundi(signf(vel.x)))
 	for p in platforms:
 		if is_solid(p) and p.style in ["dock","rail","stone","drain","viaduct","pier","wide_pier"]:
@@ -651,10 +1024,10 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 	for box in freight:
 		collide_side(box.x-21,box.x+21,box.y-45,old_x,dir)
 	for roof in structures:
-		var left:=float(roof.x)
-		var right:=left+float(roof.w)
-		var top:=float(roof.y)
-		if old_y-BODY<top+15 and old_y>top:
+		var bounds:=roof_bounds(roof)
+		var left:=bounds.position.x
+		var right:=bounds.end.x
+		if old_y-BODY<bounds.end.y and old_y>bounds.position.y:
 			if old_x+RADIUS<=left and pos.x+RADIUS>left: pos.x=left-RADIUS
 			if old_x-RADIUS>=right and pos.x-RADIUS<right: pos.x=right+RADIUS
 	for s in stations:
@@ -675,7 +1048,7 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 	pos.y += vel.y*dt
 	if vel.y<0:
 		for roof in structures:
-			var bottom:=float(roof.y)+15
+			var bottom:=roof_bounds(roof).end.y
 			if pos.x+RADIUS>float(roof.x) and pos.x-RADIUS<float(roof.x)+float(roof.w) and old_y-BODY>=bottom and pos.y-BODY<bottom:
 				pos.y=bottom+BODY
 				vel.y=0
@@ -717,16 +1090,37 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 		stride += absf(pos.x-old_x)*0.083
 		if int(stride/PI) != last_step:
 			last_step = int(stride/PI)
-			events.append("step")
+			events.append(footstep())
 	else:
 		grace = maxf(0,grace-dt)
 	near_valve=-1
 	valve_action=""
 	chamber_jump=false
 	var submerged := false
-	var struck := false
+	for gate in key_gates:
+		if not gate.open and not gate.key_taken and Vector2(gate.key_pos).distance_to(pos-Vector2(0,18))<25:
+			gate.key_taken=true
+			events.append("engage")
+	var struck := struck_by_structure() or struck_by_rock()
 	for i in devices.size():
 		var d: Dictionary = devices[i]
+		if d.type=="elephant":
+			var pass_x:=float(d.x)+58
+			if d.mode==0 and old_x<=pass_x and pos.x>pass_x:
+				d.mode=1
+				d.timer=.48
+				events.append("pursuit")
+			if d.mode==2 and absf(pos.x-float(d.foot_x))<46 and pos.y>float(d.y)-64 and pos.y-BODY<float(d.y):
+				struck=true
+		elif d.type=="spikes" and hits_spikes(d):
+			struck=true
+		elif d.type=="gorilla" and hits_gorilla(d):
+			struck=true
+		elif d.type=="cable_drum" and d.mode==2:
+			var center:=Vector2(d.roll_x,float(d.y)-DRUM_RADIUS)
+			var closest:=center.clamp(pos-Vector2(RADIUS,BODY),pos+Vector2(RADIUS,0))
+			if center.distance_squared_to(closest)<DRUM_RADIUS*DRUM_RADIUS:
+				struck=true
 		if d.type in ["hound","spider"] and int(d.mode)==2 and absf(pos.x-float(d.dog))<25 and pos.y>float(d.y)-27 and pos.y-BODY<float(d.y):
 			struck=true
 		if d.type=="swarm" and d.mode==1 and Vector2(d.flight).distance_to(pos+Vector2(0,-24))<7: struck=true
@@ -748,9 +1142,7 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 				elif d.mode==2:
 					chamber_jump=true
 	if pos.y > minf(496,camera_y+570) or submerged or struck:
-		death_timer = 0.68
-		events.append("splash" if not struck and grounded==-1 else "impact")
-		ledge=-1
+		fail_crossing(struck)
 		return
 	near_station = -1
 	var next:=completed.size()
@@ -759,15 +1151,32 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 		if needs_console(next):
 			if absf(pos.x-float(s.x))<78 and absf(pos.y-float(s.y))<45: near_station=next
 		elif pos.x>=float(s.x):
-			activate(next,false)
+			activate(next)
 	if pos.x >= width-56 and completed.size() == stations.size():
 		finish = true
 	track_keeper(dt)
 
+func fail_crossing(struck: bool) -> void:
+	death_timer=0.68
+	events.append("splash" if not struck and grounded==-1 else "impact")
+	ledge=-1
+	ladder=-1
+
 func is_grounded() -> bool:
 	return grounded != -1
 
-func activate(index: int,puzzle := true) -> void:
+func footstep() -> String:
+	if mounted=="ride": return "step_clay"
+	if grounded<0: return "step_wood"
+	match str(platforms[grounded].style):
+		"rail","catwalk","span","hoist","cage": return "step"
+		"stone","pier","wide_pier","viaduct","drain","bollard": return "step_stone"
+		"loose","branch","vine","rocker","skiff","float","bob","chamber","balance": return "step_wood"
+		"ray": return "step_glass"
+		"island","cargo_net": return "step_soft"
+	return GROUND_STEPS[Book.region(room)]
+
+func activate(index: int) -> void:
 	var s: Dictionary = stations[index]
 	if completed.has(s.key):
 		return
@@ -775,10 +1184,4 @@ func activate(index: int,puzzle := true) -> void:
 	restored_at[s.key]=time
 	checkpoint = Vector2(s.x+26,s.y)
 	near_station = -1
-	if puzzle:
-		s.was_console=true
-		puzzle_turn+=1
-		puzzle_wait=Book.PUZZLE_INTERVAL
-		events.append("save")
-	else:
-		events.append("checkpoint")
+	events.append("checkpoint" if str(s.board).is_empty() else "save")
