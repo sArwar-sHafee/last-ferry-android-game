@@ -13,9 +13,26 @@ const GRAVITY := 990.0
 const RADIUS := 8.0
 const ROCKER_MAX_SLOPE := .68
 const ROCKER_GAP := 74.0
+const ROCKER_BALANCE_RADIUS := .5
 const BODY := 40.0
 const LADDER_SPEED := 100.0
 const CULVERT_PERIOD := 4.8
+const ACID_STOP := 3.95
+# Keep the original sine sweep between stops and halve the time spent at each stop.
+const SHUTTER_SWEEP_SPEED := 1.22
+const SHUTTER_OPEN_ANGLE := asin(1.0/2.8-.24)
+const SHUTTER_CLOSED_ANGLE := asin(-.24)
+const SHUTTER_TRAVEL := (SHUTTER_OPEN_ANGLE-SHUTTER_CLOSED_ANGLE)/SHUTTER_SWEEP_SPEED
+const SHUTTER_OPEN_PAUSE := (PI-2.0*SHUTTER_OPEN_ANGLE)/(2.0*SHUTTER_SWEEP_SPEED)
+const SHUTTER_CLOSED_PAUSE := (PI+2.0*SHUTTER_CLOSED_ANGLE)/(2.0*SHUTTER_SWEEP_SPEED)
+const SHUTTER_PERIOD := SHUTTER_OPEN_PAUSE+SHUTTER_CLOSED_PAUSE+2.0*SHUTTER_TRAVEL
+const SNAKE_WINDUP := .95
+const SNAKE_BITE_TIME := .19
+const SNAKE_REST := .48
+const SNAKE_RETREAT := .52
+const SNAKE_TRIGGER := 106.0
+const SNAKE_REACH := 127.0
+enum SnakeMode { GUARD, WINDUP, BITE, RECOVER, RETREAT, HIDDEN }
 const SPIKE_COUNT := 3
 const SPIKE_PITCH := 14.0
 const SPIKE_HEIGHT := 24.0
@@ -161,7 +178,7 @@ func moving_decks(pattern: int, tidal: bool, span_count := 0) -> void:
 		var w:=61+beat*5 if tidal else 75+beat*3
 		_x+=29+beat*4
 		var travel:=22+beat*2 if tidal else 33+beat*2
-		var rate:=1.02+.09*beat
+		var rate:=(1.02+.09*beat)*1.24
 		var style:="bob" if tidal else "float"
 		platform(_x,_y+5-3*(j%2),w,style,Vector2(0,-travel),rate)
 		platforms.back().phase=(j%3)*.48
@@ -178,7 +195,7 @@ func build_section(token: String) -> void:
 		"short_wreck": plank_run(room*7+section_number*3,3)
 		"broken_jetty": plank_run(4,7)
 		"single_float": moving_decks(2,false,1)
-		"flotilla": moving_decks(3,true,5)
+		"flotilla": moving_decks(3,true,6)
 		"viaduct_walk": dock(218,"viaduct")
 		"float","tide": moving_decks(room*5+section_number*2,token=="tide")
 		"causeway","wide_causeway","spillway":
@@ -301,6 +318,14 @@ func build_section(token: String) -> void:
 			devices.append({"type":token,"x":home,"y":_y,"foot_x":home,"start":_x+52,
 				"end":_x+678,"mode":0,"timer":0.0,"facing":1})
 			dock(742)
+		"giant_snake":
+			devices.append({"type":"snake","x":_x+260,"y":_y,"mode":SnakeMode.GUARD,
+				"timer":0.0,"misses":0})
+			dock(408,"grass")
+		"boar_spikes":
+			for i in 5:
+				spike_bed(_x+108+i*121,1)
+			dock(715,"grass")
 		"spikes":
 			spike_bed(_x+112)
 			dock(224,"stone")
@@ -333,13 +358,19 @@ func build_section(token: String) -> void:
 			add_ladder(shaft,_y,lower,_x+7,shaft+12)
 			add_monkey(shaft+114,lower,ladders.size()-1)
 			dock(230,"catwalk")
-		"cable_drum":
+		"cable_drum","rolling_log":
 			var later:=Book.chapter(room)>=10
 			devices.append({"type":token,"x":_x+355,"y":_y,"trigger":_x+48,"end":_x+23,
 				"roll_x":_x+355,"mode":0,"timer":0.0,"warning":.43 if later else .6,
 				"speed":255.0 if later else 236.0})
-			platform(_x+152,_y-47,49,"bollard")
-			dock(450,"rail")
+			platform(_x+152,_y-47,49,"stump" if token=="rolling_log" else "bollard")
+			dock(450,"grass" if token=="rolling_log" else "rail")
+		"boar_hound":
+			var kennel:=_x+60
+			devices.append({"type":"hound","x":kennel,"y":_y,"limit":kennel,
+				"far_post":_x+575,"rear_trigger":kennel+134,"dog":kennel,
+				"mode":0,"timer":0.0,"facing":1,"speed":172.0})
+			dock(635,"grass")
 		"hound","hound_spikes","swarm_hound","spider":
 			var start:=_x
 			dock(960,"rail")
@@ -455,8 +486,8 @@ func build_section(token: String) -> void:
 			_y -= 30
 			dock(180,"stone")
 
-func spike_bed(x: float) -> void:
-	devices.append({"type":"spikes","x":x,"y":_y})
+func spike_bed(x: float,count := SPIKE_COUNT) -> void:
+	devices.append({"type":"spikes","x":x,"y":_y,"count":count})
 
 func add_swarm(x: float,speed: float,end := INF) -> void:
 	devices.append({"type":"swarm","x":x,"y":_y-36,"flight":Vector2(x-110,_y-64),
@@ -516,17 +547,22 @@ func spawn() -> void:
 	for device in devices:
 		device.mode=0
 		if device.type in ["hound","spider"]:
-			device.facing=-1
+			device.facing=1 if device.has("rear_trigger") else -1
 			device.dog=float(device.x)
 			device.timer=0.0
+			device.bark_time=0.0
 		elif device.type=="swarm":
 			device.flight=Vector2(device.x-110,device.y-28)
 		elif device.type=="gorilla":
 			device.mode=GorillaMode.HIDDEN if device.opening and completed.is_empty() else GorillaMode.RUNNING
 			var start:=float(device.x) if device.mode==GorillaMode.HIDDEN else checkpoint.x-220
 			device.chase=Vector2(start,device.y)
-			device.timer=2.8
+			device.timer=0.0
 			device.rope=-1
+		elif device.type=="snake":
+			device.mode=SnakeMode.HIDDEN if checkpoint.x>float(device.x) else SnakeMode.GUARD
+			device.timer=0.0
+			device.misses=0
 		elif device.type=="elephant":
 			device.foot_x=device.x
 			device.facing=1
@@ -539,7 +575,7 @@ func spawn() -> void:
 		elif device.type=="cargo_net":
 			device.amount=0.0
 			device.timer=0.0
-		elif device.type=="cable_drum":
+		elif device.type in ["cable_drum","rolling_log"]:
 			device.roll_x=device.x
 			device.timer=0.0
 		elif device.type=="rocker":
@@ -569,6 +605,8 @@ func update_devices(dt: float) -> void:
 				else: d.mode=0
 			"hound","spider":
 				update_hound(d,dt)
+			"snake":
+				update_snake(d,dt)
 			"elephant":
 				update_elephant(d,dt)
 			"gorilla":
@@ -584,12 +622,15 @@ func update_devices(dt: float) -> void:
 					if d.amount==1: d.timer=.9
 				else:
 					d.amount=move_toward(float(d.amount),0.0,dt*.85)
-			"cable_drum":
-				update_cable_drum(d,dt)
+			"cable_drum","rolling_log":
+				update_rolling_hazard(d,dt)
 			"rocker":
 				var load:=0.0
 				if grounded>=0 and platforms[grounded].style=="rocker" and devices[platforms[grounded].device]==d:
-					load=clampf((pos.x-float(d.x))/float(d.half_span),-1,1)
+					var offset:=pos.x-float(d.x)
+					var lever:=smoothstep(ROCKER_BALANCE_RADIUS,float(d.half_span),absf(offset))
+					# A sensitive pivot responds visibly to small shifts in weight.
+					load=signf(offset)*pow(lever,.25)
 				d.tilt=move_toward(float(d.tilt),load*ROCKER_MAX_SLOPE,dt*1.12)
 			"steam":
 				d.cycle=fposmod(time+float(d.phase),4.8)
@@ -608,7 +649,17 @@ func update_devices(dt: float) -> void:
 				d.first=move_toward(float(d.first),1.0 if d.mode==1 else 0.0,dt*(.42 if feeding_second else .53))
 				d.second=move_toward(float(d.second),1.0 if feeding_second else 0.0,dt*.95)
 			"shutter":
-				d.amount=clampf((sin((time+float(d.offset))*1.22)+.24)*2.8,0,1)
+				d.amount=shutter_opening(time+float(d.offset))
+
+func shutter_opening(seconds: float) -> float:
+	var phase:=fposmod(seconds,SHUTTER_PERIOD)
+	if phase<SHUTTER_OPEN_PAUSE: return 1.0
+	var close_time:=phase-SHUTTER_OPEN_PAUSE
+	if close_time<SHUTTER_TRAVEL:
+		return clampf((sin(SHUTTER_OPEN_ANGLE-close_time*SHUTTER_SWEEP_SPEED)+.24)*2.8,0,1)
+	var open_time:=phase-(SHUTTER_PERIOD-SHUTTER_TRAVEL)
+	if open_time<=0.0: return 0.0
+	return clampf((sin(SHUTTER_CLOSED_ANGLE+open_time*SHUTTER_SWEEP_SPEED)+.24)*2.8,0,1)
 
 func update_structures() -> void:
 	for roof in structures:
@@ -618,9 +669,9 @@ func update_structures() -> void:
 			var lift:=smoothstep(.85,1.5,cycle)*(1.0-smoothstep(3.10,3.80,cycle))
 			roof.y=float(roof.floor)-lerpf(18,92,lift)
 		if roof.type!="low":
-			var discharge:=2.75 if roof.moving else 2.60
+			var discharge:=acid_release_time(roof)
 			var acid_mode:=0
-			if cycle>=discharge and cycle<3.95: acid_mode=2
+			if cycle>=discharge and cycle<ACID_STOP: acid_mode=2
 			elif cycle>=discharge-.55 and cycle<discharge: acid_mode=1
 			if acid_mode!=int(roof.acid_mode) and absf(pos.x-float(roof.x))<245:
 				if acid_mode==1: events.append("ratchet")
@@ -630,6 +681,9 @@ func update_structures() -> void:
 func roof_bounds(roof: Dictionary) -> Rect2:
 	var top:=float(roof.floor)-118 if roof.moving else float(roof.y)
 	return Rect2(roof.x,top,roof.w,float(roof.y)+15-top)
+
+func acid_release_time(roof: Dictionary) -> float:
+	return 2.75 if roof.moving else 2.60
 
 func acid_bounds(roof: Dictionary) -> Rect2:
 	var outlet:=float(roof.floor)-70
@@ -642,13 +696,13 @@ func struck_by_structure() -> bool:
 		if roof.acid_mode==2 and keeper.intersects(acid_bounds(roof)): return true
 	return false
 
-func update_cable_drum(d: Dictionary,dt: float) -> void:
+func update_rolling_hazard(d: Dictionary,dt: float) -> void:
 	match int(d.mode):
 		0:
 			if pos.x>=float(d.trigger) and pos.x<float(d.x) and absf(pos.y-float(d.y))<85:
 				d.mode=1
 				d.timer=d.warning
-				events.append("ratchet")
+				events.append("step_wood" if d.type=="rolling_log" else "ratchet")
 		1:
 			d.timer-=dt
 			if d.timer<=0:
@@ -657,6 +711,37 @@ func update_cable_drum(d: Dictionary,dt: float) -> void:
 		2:
 			d.roll_x=move_toward(float(d.roll_x),float(d.end),float(d.speed)*dt)
 			if d.roll_x==d.end: d.mode=3
+
+func update_snake(snake: Dictionary,dt: float) -> void:
+	snake.timer=maxf(0,float(snake.timer)-dt)
+	match int(snake.mode):
+		SnakeMode.GUARD:
+			var distance:=float(snake.x)-pos.x
+			if distance>=0 and distance<=SNAKE_TRIGGER and absf(pos.y-float(snake.y))<86:
+				snake.mode=SnakeMode.WINDUP
+				snake.timer=SNAKE_WINDUP
+				events.append("flow")
+		SnakeMode.WINDUP:
+			if snake.timer<=0:
+				snake.mode=SnakeMode.BITE
+				snake.timer=SNAKE_BITE_TIME
+				events.append("rock_throw")
+		SnakeMode.BITE:
+			if snake.timer<=0:
+				snake.misses+=1
+				snake.mode=SnakeMode.RETREAT if snake.misses>=3 else SnakeMode.RECOVER
+				snake.timer=SNAKE_RETREAT if snake.misses>=3 else SNAKE_REST
+		SnakeMode.RECOVER:
+			if snake.timer<=0: snake.mode=SnakeMode.GUARD
+		SnakeMode.RETREAT:
+			if snake.timer<=0: snake.mode=SnakeMode.HIDDEN
+
+func snake_hint() -> String:
+	for snake in devices:
+		if snake.type!="snake" or snake.mode>=SnakeMode.RETREAT or absf(pos.x-float(snake.x))>215: continue
+		if snake.mode==SnakeMode.WINDUP: return "Back away before the bite"
+		return "Bait three bites · %d/3 missed" % int(snake.misses)
+	return ""
 
 func update_elephant(d: Dictionary,dt: float) -> void:
 	match int(d.mode):
@@ -684,7 +769,6 @@ func add_chase_rope(start: float,end: float,deck_y: float) -> void:
 func continue_gorilla(previous: RefCounted) -> void:
 	var lead:=maxf(70,previous.pos.x-float(previous.gorilla.chase.x))
 	gorilla.chase.x=pos.x-lead
-	gorilla.timer=previous.gorilla.timer
 
 func update_gorilla(d: Dictionary,dt: float) -> void:
 	match int(d.mode):
@@ -705,7 +789,6 @@ func update_gorilla(d: Dictionary,dt: float) -> void:
 			d.timer-=dt
 			if d.timer<=0:
 				d.mode=GorillaMode.RUNNING
-				d.timer=2.8
 			return
 	var lead:=pos.x-float(d.chase.x)
 	var pace:=clampf(124.0+(lead-44.0)*.20,124.0,GORILLA_MAX_SPEED)
@@ -716,10 +799,6 @@ func update_gorilla(d: Dictionary,dt: float) -> void:
 			if p.style in ["loose","bollard"] or not is_solid(p): continue
 			if float(p.pos.x)<=float(d.chase.x): surface=float(p.pos.y)
 		d.chase.y=move_toward(float(d.chase.y),surface,340*dt)
-	d.timer-=dt
-	if d.timer<=0:
-		d.timer=4.6
-		events.append("gorilla_call")
 
 func swing_gorilla(d: Dictionary) -> bool:
 	d.rope=-1
@@ -801,14 +880,35 @@ func throw_ladder_rock(monkey: Dictionary,rungs: Dictionary) -> void:
 
 func hits_spikes(d: Dictionary) -> bool:
 	if pos.y-BODY>=float(d.y): return false
-	for tooth in SPIKE_COUNT:
-		var tip_x:=float(d.x)+(tooth-(SPIKE_COUNT-1)*.5)*SPIKE_PITCH
+	var count:=int(d.count)
+	for tooth in count:
+		var tip_x:=float(d.x)+(tooth-(count-1)*.5)*SPIKE_PITCH
 		var gap:=maxf(0,absf(pos.x-tip_x)-RADIUS)
 		if gap<SPIKE_PITCH*.5 and pos.y>float(d.y)-SPIKE_HEIGHT*(1.0-2*gap/SPIKE_PITCH):
 			return true
 	return false
 
 func update_hound(d: Dictionary,dt: float) -> void:
+	d.bark_time=maxf(0.0,float(d.bark_time)-dt)
+	if d.has("rear_trigger"):
+		match int(d.mode):
+			0:
+				if pos.x>=float(d.rear_trigger):
+					d.mode=1
+					d.timer=.39
+					hound_call(d)
+					events.append("pursuit")
+			1:
+				d.timer-=dt
+				if d.timer<=0: d.mode=2
+			2:
+				d.dog=move_toward(float(d.dog),float(d.far_post),float(d.speed)*dt)
+				if pos.x>=float(d.far_post) or d.dog>=float(d.far_post): d.mode=4
+			4:
+				d.facing=-1
+				d.dog=move_toward(float(d.dog),float(d.x),122*dt)
+				if d.dog==d.x: d.mode=5
+		return
 	# A sentry works the stretch between two posts. At either end it plants
 	# its feet before reversing. Once the yard is empty it trots home.
 	match int(d.mode):
@@ -817,7 +917,7 @@ func update_hound(d: Dictionary,dt: float) -> void:
 			if distance>0 and distance<=335 and absf(pos.y-float(d.y))<78:
 				d.mode=1
 				d.timer=.58
-				events.append("bark" if d.type=="hound" else "ratchet")
+				hound_call(d)
 				events.append("pursuit")
 		1,3:
 			d.timer-=dt
@@ -828,7 +928,7 @@ func update_hound(d: Dictionary,dt: float) -> void:
 						d.facing=signi(roundi(float(d.x)-float(d.dog)))
 						return
 					d.facing=-int(d.facing)
-					events.append("bark" if d.type=="hound" else "ratchet")
+					hound_call(d)
 				d.mode=2
 		2:
 			var end:float=d.limit if d.facing<0 else d.far_post
@@ -842,6 +942,13 @@ func update_hound(d: Dictionary,dt: float) -> void:
 			if is_equal_approx(float(d.dog),float(d.x)):
 				d.mode=0
 				d.facing=-1
+
+func hound_call(d: Dictionary) -> void:
+	if d.type=="hound":
+		d.bark_time=.27
+		events.append("bark")
+	else:
+		events.append("ratchet")
 
 func operate_valve() -> bool:
 	if near_valve<0 or death_timer>0: return false
@@ -1129,6 +1236,9 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 		if old_y-BODY<bounds.end.y and old_y>bounds.position.y:
 			if old_x+RADIUS<=left and pos.x+RADIUS>left: pos.x=left-RADIUS
 			if old_x-RADIUS>=right and pos.x-RADIUS<right: pos.x=right+RADIUS
+	for snake in devices:
+		if snake.type=="snake" and snake.mode!=SnakeMode.HIDDEN and old_x<float(snake.x):
+			pos.x=minf(pos.x,float(snake.x)-34)
 	for s in stations:
 		if not completed.has(s.key):
 			pos.x = minf(pos.x,float(s.x)+94-RADIUS)
@@ -1210,12 +1320,16 @@ func step(dt: float, axis: float, jump: bool, grip: bool) -> void:
 			if d.mode==0 and old_x<=pass_x and pos.x>pass_x:
 				d.mode=1
 				d.timer=.48
+				events.append("elephant_call")
 				events.append("pursuit")
 			if d.mode==2 and absf(pos.x-float(d.foot_x))<46 and pos.y>float(d.y)-64 and pos.y-BODY<float(d.y):
 				struck=true
+		elif d.type=="snake" and d.mode==SnakeMode.BITE:
+			var reach:=float(d.x)-pos.x
+			if reach>=0 and reach<SNAKE_REACH+RADIUS and pos.y>float(d.y)-89: struck=true
 		elif d.type=="spikes" and hits_spikes(d):
 			struck=true
-		elif d.type=="cable_drum" and d.mode==2:
+		elif d.type in ["cable_drum","rolling_log"] and d.mode==2:
 			var center:=Vector2(d.roll_x,float(d.y)-DRUM_RADIUS)
 			var closest:=center.clamp(pos-Vector2(RADIUS,BODY),pos+Vector2(RADIUS,0))
 			if center.distance_squared_to(closest)<DRUM_RADIUS*DRUM_RADIUS:
@@ -1276,6 +1390,8 @@ func footstep() -> String:
 	if grounded<0: return "step_wood"
 	match str(platforms[grounded].style):
 		"rail","catwalk","span","hoist","cage": return "step"
+		"grass": return "step_grass"
+		"stump": return "step_wood"
 		"stone","pier","wide_pier","viaduct","drain","bollard": return "step_stone"
 		"loose","branch","vine","rocker","skiff","float","bob","chamber","balance": return "step_wood"
 		"ray": return "step_glass"

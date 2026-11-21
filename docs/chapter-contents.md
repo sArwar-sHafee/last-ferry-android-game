@@ -12,13 +12,13 @@ The chapter picker numbers the shorter voyage consecutively. The table includes 
 | ---: | ---: | --- | --- | --- |
 | 01 | 01 | The Landing | Three Short Blasts<br>The Ropewalk<br>The Broken Jetty | Practice a ledge grab, a skiff crossing, and three breakable planks. |
 | 02 | 02 | The Tidal Quays | The Tarred Slip<br>Coal Dogs<br>The Pitch Kettle | Push one crate, then learn the hound and ground spikes in separate scenes. |
-| 03 | 04 | Mangrove Canopy | Out of Soundings<br>The Outer Piles<br>Dogs at Anchor<br>The Old Fish Market | Move through branches and a swinging vine. Meet the swarm, spider, and rock-throwing monkey separately. |
+| 03 | 04 | Mangrove Canopy | Out of Soundings<br>The Outer Piles<br>Dogs at Anchor<br>The Old Fish Market | Bait three strikes from the giant snake in Dogs at Anchor. In The Old Fish Market, pass the monkey and jump onto a stump to let the rolling log pass. |
 | 04 | 06 | The Pumpworks | Below the Gauge<br>The Overflow Lip<br>The Gauge Keeper | Learn the two-chamber transfer, tilting bridge, and steam vent on their own. Wait for the pumpwork drain to finish releasing acid. |
 | 05 | 09 | The Freightyard | The Swept Rails<br>The Upper Track<br>The Crane Saddle | Ride a trolley and use a balance platform. Learn to shelter from the rolling drum and jump off a sagging cargo net. |
-| 06 | 11 | Boar Run | Bracken Gate<br>The Root Road<br>Split Hoof Ford | Approach the tethered boar on foot to start the ride. Cross a spillway and seven loose planks before dismounting at the galleries. |
+| 06 | 11 | Boar Run | Bracken Gate<br>The Root Road<br>Split Hoof Ford | Mount the tethered boar and dodge a rock-throwing monkey at Bracken Gate. Outrun a hound in The Root Road, then jump five spaced spikes and seven loose planks in Split Hoof Ford. |
 | 07 | 13 | The Engine Galleries | The Flywheel Pit<br>The Sump Bridge<br>The Boiler Feed | Time a pair of vents, then a vent followed by spikes. Run under a lifting roof before it drops, then jump straight from a tilting bridge onto a skiff. |
 | 08 | 14 | The Limestone Cut | A Hollow Knocking<br>The Delivery Main<br>The Pumpman’s Locker | Run from the elephant. Cross four breakable planks with a swarm in pursuit, then climb out by lift cage. |
-| 09 | 16 | The Lens Works | A Line of Prisms<br>The Silvered Room<br>The Prism Bath | Use moving floats, suspended light blocks, a shutter, and a lift leading to wider causeway jumps. |
+| 09 | 16 | The Lens Works | A Line of Prisms<br>The Silvered Room<br>The Prism Bath | Jump across six faster floating decks in A Line of Prisms. Use suspended light blocks, shutters, and a lift before the wider causeway jumps. |
 | 10 | 18 | The Tower Shaft | The Keeper’s Launch<br>The Brass Ladder<br>The Blind Landing | Unlock the ladder door and cross an aqueduct into a bridge-to-skiff jump. Practice the acid gate and stepped ascent in The Blind Landing. |
 | 11 | 19 | The Breakwater | The Cable Drum<br>The Gull Roost | The gorilla walks in from the left and beats its chest. It swings over the loose planks and gap on ropes and keeps chasing through The Gull Roost. |
 | 12 | 20 | The Lantern Cage | Storm Glass<br>The Night Watch | Clear the skiff channel in Storm Glass, then leave the sinking net before it drops. In The Night Watch, escape the swarm and hound, time the shutters, and run through a two-monkey ambush. |
@@ -46,18 +46,20 @@ The roof in The Sump Bridge moves vertically. Wait for it to rise, then run thro
 
 | Category | Component | Total | Chapters |
 | --- | --- | ---: | --- |
-| 🐾 Creatures and rides | Harbor hounds | 4 | 2 (1), 11 (1), 12 (1), 13 (1) |
+| 🐾 Creatures and rides | Harbor hounds | 5 | 2 (1), 6 (1), 11 (1), 12 (1), 13 (1) |
 |  | Mosquito swarms | 4 | 3 (1), 8 (1), 12 (1), 13 (1) |
 |  | Giant spiders | 1 | 3 (1) |
 |  | Grazing elephants | 1 | 8 (1) |
-|  | Rock-throwing monkeys | 5 | 3 (1), 11 (1), 12 (2), 13 (1) |
+|  | Giant snakes | 1 | 3 (1) |
+|  | Rock-throwing monkeys | 6 | 3 (1), 6 (1), 11 (1), 12 (2), 13 (1) |
 |  | Boar rides | 3 | 6 (3) |
 |  | Rail trolleys | 1 | 5 (1) |
-|  | Gorilla chases | 1 | 11 (1) |
+|  | Gorilla chases | 2 | 11 (2) |
 | ⚙️ Machinery and hazards | Two-chamber locks | 2 | 4 (1), 10 (1) |
 |  | Steam vents | 5 | 4 (1), 7 (3), 13 (1) |
 |  | Loose cable drums | 2 | 5 (1), 11 (1) |
-|  | Ground spikes | 4 | 2 (1), 7 (1), 11 (1), 13 (1) |
+|  | Rolling logs | 1 | 3 (1) |
+|  | Ground spikes | 9 | 2 (1), 6 (5), 7 (1), 11 (1), 13 (1) |
 |  | Shutters | 6 | 9 (1), 12 (2), 13 (3) |
 |  | Movable crates | 2 | 2 (1), 5 (1) |
 |  | Balance platforms | 1 | 5 (1) |
@@ -71,7 +73,7 @@ The roof in The Sump Bridge moves vertically. Wait for it to rise, then run thro
 |  | Keys and locked doors | 1 | 10 (1) |
 | 🪵 Traversal | Breakable plank groups | 6 | 1 (1), 6 (1), 8 (1), 11 (1), 13 (2) |
 |  | Breakable planks | 30 | 1 (3), 6 (7), 8 (4), 11 (5), 13 (11) |
-|  | Floating decks | 3 | 2 (1), 9 (2) |
+|  | Floating decks | 7 | 2 (1), 9 (6) |
 |  | Waterlogged cargo nets | 2 | 5 (1), 12 (1) |
 |  | Vine crossings | 1 | 3 (1) |
 |  | Branch crossings | 1 | 3 (1) |

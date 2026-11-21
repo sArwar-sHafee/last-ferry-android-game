@@ -89,10 +89,16 @@ func pilot(r: Passage) -> Array:
 			var ready: bool=roof.cycle>=1.5 and roof.cycle<2.2 if roof.moving else roof.cycle<2.0 or roof.cycle>=3.95
 			if not ready: return [0,false,false]
 	for device in r.devices:
+		if device.type=="snake" and device.mode<Passage.SnakeMode.RETREAT:
+			var distance:=float(device.x)-r.pos.x
+			if device.mode in [Passage.SnakeMode.WINDUP,Passage.SnakeMode.BITE]:
+				return [-1 if distance<150 else 0,false,false]
+			if device.mode==Passage.SnakeMode.RECOVER and distance<205:
+				return [0,false,false]
 		if device.type=="spikes" and r.is_grounded() and float(device.x)-r.pos.x>29 and float(device.x)-r.pos.x<56:
 			landing=-1
 			return [1,true,false]
-		if device.type=="cable_drum" and device.mode in [1,2] and device.roll_x>r.pos.x-24:
+		if device.type in ["cable_drum","rolling_log"] and device.mode in [1,2] and device.roll_x>r.pos.x-24:
 			var takeoff:=float(device.trigger)+42
 			var refuge:=float(device.trigger)+126
 			if r.pos.x>=takeoff and r.pos.x<refuge and r.is_grounded() and r.pos.y>float(device.y)-2:
@@ -101,7 +107,7 @@ func pilot(r: Passage) -> Array:
 			if r.pos.x>=refuge:
 				landing=-1
 				return [0,false,false]
-		if device.type in ["hound","spider"] and device.mode==2 and r.is_grounded():
+		if device.type in ["hound","spider"] and not device.has("rear_trigger") and device.mode==2 and r.is_grounded():
 			var distance:float=(r.pos.x-float(device.dog))*float(device.facing)
 			var closing:float=float(device.speed)+r.SPEED if device.facing<0 else float(device.speed)-r.SPEED
 			var takeoff:=closing*.31 if device.facing<0 else 25.0+closing*.135
@@ -303,8 +309,20 @@ func checkpoint_checks() -> void:
 	var shutter:=Passage.new(Book.migrated_room(105),["l2","l3"])
 	for d in shutter.devices:
 		if d.type!="shutter": continue
+		shutter.time=1.18
+		shutter.update_devices(0.0)
+		check(d.amount==1.0,"the shutter stays fully open for about 1.19 seconds")
+		shutter.time=1.20
+		shutter.update_devices(0.0)
+		check(d.amount<1.0 and d.amount>0.0,"the shutter starts closing after the shorter pause")
+		shutter.time=2.57
+		shutter.update_devices(0.0)
+		check(d.amount==0.0,"the shutter stays fully closed for about 1.09 seconds")
+		shutter.time=2.59
+		shutter.update_devices(0.0)
+		check(d.amount>0.0 and d.amount<1.0,"the shutter starts opening after the shorter pause")
 		shutter.pos=Vector2(d.x,d.y)
-		shutter.time=3.6
+		shutter.time=2.0
 		shutter.step(1.0/60,0,false,false)
 		check(shutter.death_timer>0,"closing shutter triggers checkpoint recovery")
 		for j in 46: shutter.step(1.0/60,0,false,false)
@@ -424,7 +442,7 @@ func update_checks() -> void:
 		if d.type!="hound": continue
 		hound.pos=Vector2(d.x-295,d.y)
 		hound.step(1.0/60,0,false,false)
-		check(d.mode==1 and d.dog>hound.pos.x and "bark" in hound.events and "pursuit" in hound.events,"hound warns before pursuit")
+		check(d.mode==1 and d.dog>hound.pos.x and d.bark_time>0 and "bark" in hound.events and "pursuit" in hound.events,"hound warns before pursuit")
 		for frame in 140:
 			hound.step(1.0/60,0,false,false)
 			if hound.death_timer>0: break
@@ -570,8 +588,23 @@ func bridge_checks() -> void:
 			var safe_exit:=exit_gap>=46 and exit_gap<=58 if right.style=="skiff" else exit_gap==74
 			check(bridge.pos.x-left.pos.x-left.w==74 and safe_exit,
 				"tilting bridge has gaps on both sides in room "+str(room))
+			var keys:=layout.stations.map(func(station): return station.key)
+			var balance:=Passage.new(room,keys)
+			var balance_beam:Dictionary=balance.platforms[i]
+			var pivot:Dictionary=balance.devices[balance_beam.device]
+			for offset in [0.0,.25,-1.0,1.0]:
+				pivot.tilt=0.0
+				balance.pos=Vector2(float(pivot.x)+offset,pivot.y)
+				balance.vel=Vector2.ZERO
+				balance.grounded=i
+				for frame in 30: balance.step(1.0/60,0,false,false)
+				var slope:=float(pivot.tilt)
+				check(balance.grounded==i,"the keeper stays on the bridge near its pivot")
+				if absf(offset)<.5:
+					check(is_zero_approx(slope),"the bridge balances within half a pixel of its pivot")
+				else:
+					check(slope*signf(offset)>.04,"a one-pixel shift tilts the bridge toward the keeper")
 			for direction in [-1,1]:
-				var keys:=layout.stations.map(func(station): return station.key)
 				var ride:=Passage.new(room,keys)
 				var beam:Dictionary=ride.platforms[i]
 				var device:Dictionary=ride.devices[beam.device]
@@ -723,6 +756,79 @@ func vehicle_checks() -> void:
 	check(game.route.room==Book.migrated_room(88) and game.route.active_ride<0 and game.route.rides.is_empty(),
 		"the keeper enters the Engine Galleries on foot")
 
+func snake_encounter_checks() -> void:
+	const DT:=1.0/60.0
+	var scene:=Book.migrated_room(22)
+	var r:=Passage.new(scene,["17a"])
+	var snake:Dictionary=r.devices.back()
+	var mouth:=float(snake.x)
+	r.pos=Vector2(mouth-Passage.SNAKE_TRIGGER+3,snake.y)
+	r.step(DT,0,false,false)
+	check(snake.mode==Passage.SnakeMode.WINDUP and is_equal_approx(snake.timer,.95),"approaching the burrow starts a near-one-second windup")
+	for frame in 52: r.step(DT,1,false,false)
+	check(r.pos.x<mouth and snake.mode==Passage.SnakeMode.WINDUP and r.death_timer==0,
+		"the guarded road blocks a keeper rushing the telegraph")
+	for frame in 10:
+		r.step(DT,1,false,false)
+		if r.death_timer>0: break
+	check(r.death_timer>0 and snake.misses==0,"the lunge catches a keeper who stays in reach")
+	for frame in 44: r.step(DT,0,false,false)
+	check(snake.mode==Passage.SnakeMode.GUARD and snake.misses==0,"checkpoint recovery resets the snake")
+
+	for miss in range(1,4):
+		r.pos=Vector2(mouth-Passage.SNAKE_TRIGGER+3,snake.y)
+		r.step(DT,0,false,false)
+		for frame in 76:
+			var back:=r.pos.x>mouth-Passage.SNAKE_REACH-27
+			r.step(DT,-1 if back else 0,false,false)
+			if snake.mode>=Passage.SnakeMode.RECOVER: break
+		check(snake.misses==miss and r.death_timer==0,"retreating safely counts one missed bite")
+		for frame in 36: r.step(DT,0,false,false)
+		check(snake.mode==(Passage.SnakeMode.HIDDEN if miss==3 else Passage.SnakeMode.GUARD),
+			"the snake returns to its guard twice and hides after the third miss")
+	for frame in 220:
+		r.step(DT,1,false,false)
+		if r.finish or r.death_timer>0: break
+	check(r.finish and r.death_timer==0,"the keeper can walk over the empty burrow to the exit")
+
+func boar_obstacles_and_floats_checks() -> void:
+	const DT:=1.0/60.0
+	var gate:=Passage.new(Book.migrated_room(68))
+	check(gate.devices.any(func(d): return d.type=="monkey"),"Bracken Gate has a rock-throwing monkey")
+	var road:=Passage.new(Book.migrated_room(69),["15a"])
+	var dog:Dictionary=road.devices[0]
+	road.pos=Vector2(float(dog.rear_trigger)+3,dog.y)
+	for frame in 34: road.step(DT,1,false,false)
+	check(road.mounted=="ride" and dog.mode==2 and dog.x<dog.dog and dog.dog<road.pos.x and road.events.has("bark"),
+		"the Root Road hound barks and pursues the mounted keeper from behind")
+	var ford:=Passage.new(Book.migrated_room(71))
+	var teeth:=ford.devices.filter(func(d): return d.type=="spikes")
+	check(teeth.size()==5 and teeth.all(func(d): return d.count==1),"Split Hoof Ford has five individual spike jumps")
+	for i in range(1,teeth.size()):
+		check(float(teeth[i].x)-float(teeth[i-1].x)>100,"the keeper has room to land between spikes")
+
+	for i in Book.CHAPTER_STARTS[1]:
+		check(not Passage.new(i).devices.any(func(d): return d.type=="hound"),"Chapter 1 has no hounds")
+	check(Passage.new(Book.migrated_room(6)).devices.any(func(d): return d.type=="hound"),
+		"Coal Dogs introduces the hound in Chapter 2")
+
+	var prism:=Book.migrated_room(103)
+	for wait in [0,48,96]:
+		var r:=Passage.new(prism)
+		var decks:=r.platforms.filter(func(p): return p.style=="bob")
+		check(decks.size()==6 and decks.all(func(p): return p.rate>=1.24),"the Prism chain has six faster moving decks")
+		for frame in wait: r.step(DT,0,false,false)
+		var landed:={}
+		landing=-1
+		for frame in 1100:
+			var move:=pilot(r)
+			r.step(DT,move[0],move[1],move[2])
+			if r.grounded>=0 and r.platforms[r.grounded].style=="bob":
+				landed[r.grounded]=true
+			if r.near_station>=0 or r.death_timer>0: break
+			if r.completed.has("2a"): break
+		check(landed.size()==6 and r.death_timer==0,"the keeper can land on all six decks at different approach phases")
+
 func boar_speed_crossing_checks() -> void:
 	var chapter:=Book.chapter(Book.migrated_room(68))
 	for direction in [-1,0,1]:
@@ -739,7 +845,7 @@ func boar_speed_crossing_checks() -> void:
 					if next.pos.x-edge>6: jump=edge-ride.pos.x<19+direction*11
 				ride.step(1.0/60,1 if ride.active_ride<0 else direction,jump,false)
 				if ride.finish or ride.death_timer>0: break
-			check(ride.finish and ride.death_timer==0,"mounted scene clears at speed input %d" % direction)
+			check(ride.finish and ride.death_timer==0,"%s clears at speed input %d" % [Book.ROOMS[room][0],direction])
 
 func chamber_transfer_checks() -> void:
 	var hand:Vector2=game.hud.zones().use
@@ -976,7 +1082,7 @@ func unplaced_component_checks() -> void:
 		if r.pos.x>=float(elephant.x)+20: break
 	check(r.pos.x>=float(elephant.x)+20 and elephant.mode==0 and elephant.foot_x==elephant.x,"elephant grazes while the keeper approaches")
 	for frame in 75: r.step(DT,1,false,false)
-	check(elephant.mode==2 and elephant.foot_x>elephant.x,"elephant runs after a keeper who has passed")
+	check(elephant.mode==2 and elephant.foot_x>elephant.x and r.events.count("elephant_call")==1,"elephant trumpets once and runs after a keeper who has passed")
 	for frame in 150:
 		r.step(DT,0,false,false)
 		if r.death_timer>0: break
@@ -1045,31 +1151,33 @@ func cargo_hazard_checks() -> void:
 		if r.death_timer>0 or r.finish: break
 	check(r.finish and sling.pos==sling.base,"jumping off in time clears the gap and the net returns")
 
-	r=component_section("cable_drum")
-	var drum:Dictionary=r.devices.back()
-	check(drum.mode==0 and drum.roll_x==drum.x,"wooden chock initially holds the drum")
-	for frame in 70:
-		r.step(DT,1,false,false)
-		if drum.mode==1: break
-	check(drum.mode==1 and drum.roll_x==drum.x,"approach shakes the chock before the drum moves")
-	for frame in 150:
-		r.step(DT,0,false,false)
-		if r.death_timer>0: break
-	check(r.death_timer>0 and r.events.has("impact"),"the rolling drum hits a keeper at deck level")
-	r.spawn()
-	check(drum.mode==0 and drum.roll_x==drum.x,"checkpoint resets the cable drum and chock")
-	var takeoff:=float(drum.trigger)+42
-	var refuge:=float(drum.trigger)+126
-	for frame in 150:
-		var advance:=r.pos.x<refuge
-		r.step(DT,1 if advance else 0,r.is_grounded() and r.pos.x>=takeoff and r.pos.x<takeoff+4,false)
-		if r.death_timer>0 or (drum.mode==2 and drum.roll_x<r.pos.x-24): break
-	check(r.death_timer==0 and r.grounded>=0 and r.platforms[r.grounded].style=="bollard" and drum.roll_x<r.pos.x-24,
-		"keeper can jump onto the bollard and let the drum roll underneath")
-	for frame in 300:
-		r.step(DT,1,false,false)
-		if r.death_timer>0 or r.finish: break
-	check(r.finish and drum.mode==3,"keeper can continue after the drum passes")
+	for token in ["cable_drum","rolling_log"]:
+		var refuge_style:="stump" if token=="rolling_log" else "bollard"
+		r=component_section(token)
+		var roller:Dictionary=r.devices.back()
+		check(roller.mode==0 and roller.roll_x==roller.x,"rolling obstacle starts secured")
+		for frame in 70:
+			r.step(DT,1,false,false)
+			if roller.mode==1: break
+		check(roller.mode==1 and roller.roll_x==roller.x,"approach gives a warning before the obstacle rolls")
+		for frame in 150:
+			r.step(DT,0,false,false)
+			if r.death_timer>0: break
+		check(r.death_timer>0 and r.events.has("impact"),"the rolling obstacle hits a keeper at deck level")
+		r.spawn()
+		check(roller.mode==0 and roller.roll_x==roller.x,"checkpoint resets the rolling obstacle")
+		var takeoff:=float(roller.trigger)+42
+		var refuge:=float(roller.trigger)+126
+		for frame in 150:
+			var advance:=r.pos.x<refuge
+			r.step(DT,1 if advance else 0,r.is_grounded() and r.pos.x>=takeoff and r.pos.x<takeoff+4,false)
+			if r.death_timer>0 or (roller.mode==2 and roller.roll_x<r.pos.x-24): break
+		check(r.death_timer==0 and r.grounded>=0 and r.platforms[r.grounded].style==refuge_style and roller.roll_x<r.pos.x-24,
+			"keeper can jump onto the refuge and let the obstacle roll underneath")
+		for frame in 300:
+			r.step(DT,1,false,false)
+			if r.death_timer>0 or r.finish: break
+		check(r.finish and roller.mode==3,"keeper can continue after the roller passes")
 
 func culvert_checks() -> void:
 	const DT:=1.0/60.0
@@ -1277,7 +1385,7 @@ func progression_checks() -> void:
 			check(not duplicate_sections.has("roof"),"at most one roof section in a chapter")
 			duplicate_sections["roof"]=true
 	check(played_pairs.size()==pairs.size(),"all paired encounters are live")
-	for token in ["elephant","monkey","spikes","cargo_net","cable_drum"]:
+	for token in ["elephant","monkey","spikes","cargo_net","cable_drum","rolling_log"]:
 		check(introduced.has(token),"new component is placed: "+token)
 
 func finale_rehearsal_checks() -> void:
@@ -1323,7 +1431,7 @@ func monkey_crossfire_checks() -> void:
 func gameplay_sound_checks() -> void:
 	const DT:=1.0/60.0
 	for sample in ["step_wood","step_grass","step_stone","step_clay","step_glass","step_soft",
-			"monkey_call","rock_throw","gorilla_call","gorilla_intro","boar_call"]:
+			"monkey_call","elephant_call","rock_throw","gorilla_intro","boar_call"]:
 		check(game.audio.samples[sample] is AudioStreamOggVorbis,"playable sound for "+sample)
 	for sample in [[0,"step_wood"],[20,"step_grass"],[68,"step_clay"],[103,"step_glass"],[138,"step_soft"]]:
 		var crossing:=Passage.new(Book.migrated_room(sample[0]))
@@ -1356,7 +1464,7 @@ func gameplay_sound_checks() -> void:
 	game.audio.update_swarm(24)
 	var near_volume:=game.audio.swarm_buzz.volume_db
 	game.audio.update_swarm(230)
-	check(near_volume>-3 and game.audio.swarm_buzz.volume_db>=-16 and game.audio.swarm_buzz.volume_db<near_volume,
+	check(near_volume>4 and game.audio.swarm_buzz.volume_db>=-10 and game.audio.swarm_buzz.volume_db<near_volume,
 		"the buzz is prominent up close and audible at chase distance")
 	var voice: AudioStreamPlayer=game.audio.layers[game.audio.cursor]
 	game.audio.cue("monkey_call")
@@ -1423,6 +1531,8 @@ func gorilla_checks() -> void:
 		if r.finish or r.death_timer>0: break
 	check(r.finish and stayed_behind and swung_from_ropes and ape.mode==Passage.GorillaMode.RUNNING,
 		"the gorilla swings across the planks and pursues past the checkpoint to the exit")
+	check(r.events.count("gorilla_intro")==1 and not r.events.has("gorilla_call"),
+		"the gorilla roars once during the opening display and never during the chase")
 	game.enter_room(index,[])
 	game.route.finish=true
 	game.route.pos.x=game.route.width-28
@@ -1460,6 +1570,8 @@ func run() -> void:
 	bridge_checks()
 	terrain_checks()
 	vehicle_checks()
+	snake_encounter_checks()
+	boar_obstacles_and_floats_checks()
 	boar_speed_crossing_checks()
 	chamber_transfer_checks()
 	developer_name_checks()

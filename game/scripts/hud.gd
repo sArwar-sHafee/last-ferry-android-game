@@ -81,32 +81,33 @@ func _draw() -> void:
 			if route.death_timer>0:
 				var opacity:=.26 if route.gorilla.get("mode")==Passage.GorillaMode.SLAM else .5
 				draw_rect(Rect2(0,0,960,540),Color(.04,.09,.11,clampf(route.death_timer*.9,0,opacity)))
-			var context := ""
+			var context := route.snake_hint()
 			var gate:=route.nearby_key_gate()
-			if route.ladder>=0:
-				context="Up / Down to climb · Hand to let go" if touch_device else "W / S to climb · E to let go"
-			elif gate>=0:
-				context=("Hand to unlock" if touch_device else "E to unlock") if route.key_gates[gate].key_taken else "The key is below the catwalk"
-			elif route.nearby_ladder()>=0:
-				context="Hand to grab the ladder" if touch_device else "E to grab the ladder"
-			elif route.ledge>=0 and route.pull_time<0:
-				context="Hold toward the ledge to climb"
-			elif route.ledge<0 and route.room==0 and route.pos.x>315 and route.pos.x<407:
-				context="Jump toward the high quay"
-			elif route.near_station>=0:
-				context="Operate" if touch_device else "E   /   Operate"
-			elif route.near_valve>=0:
-				context=route.valve_action if touch_device else "E   /   "+route.valve_action
-			elif route.chamber_jump:
-				context="Jump to chamber II"
-			elif route.mounted=="ride" and route.pos.x<560:
-				context="Left slows the boar. Right speeds it up. Jump the gaps."
-			elif route.boar_road and route.active_ride<0:
-				context="Walk up to the tethered boar"
-			elif route.near_crate:
-				context="Hold the hand + move" if touch_device else "Hold E + move to shift cargo"
-			elif route.room==0 and route.pos.x<230:
-				context="Move and jump across the dock" if touch_device else "A D   move     Space   jump     E   use"
+			if context.is_empty():
+				if route.ladder>=0:
+					context="Up / Down to climb · Hand to let go" if touch_device else "W / S to climb · E to let go"
+				elif gate>=0:
+					context=("Hand to unlock" if touch_device else "E to unlock") if route.key_gates[gate].key_taken else "The key is below the catwalk"
+				elif route.nearby_ladder()>=0:
+					context="Hand to grab the ladder" if touch_device else "E to grab the ladder"
+				elif route.ledge>=0 and route.pull_time<0:
+					context="Hold toward the ledge to climb"
+				elif route.ledge<0 and route.room==0 and route.pos.x>315 and route.pos.x<407:
+					context="Jump toward the high quay"
+				elif route.near_station>=0:
+					context="Operate" if touch_device else "E   /   Operate"
+				elif route.near_valve>=0:
+					context=route.valve_action if touch_device else "E   /   "+route.valve_action
+				elif route.chamber_jump:
+					context="Jump to chamber II"
+				elif route.mounted=="ride" and route.pos.x<560:
+					context="Left slows the boar. Right speeds it up. Jump hazards."
+				elif route.boar_road and route.active_ride<0:
+					context="Walk up to the tethered boar"
+				elif route.near_crate:
+					context="Hold the hand + move" if touch_device else "Hold E + move to shift cargo"
+				elif route.room==0 and route.pos.x<230:
+					context="Move and jump across the dock" if touch_device else "A D   move     Space   jump     E   use"
 			if not context.is_empty():
 				var length0:=MONO.get_string_size(context,HORIZONTAL_ALIGNMENT_LEFT,-1,15).x+32
 				draw_rect(Rect2((960-length0)/2,456,length0,38),Color(.06,.12,.13,.87))

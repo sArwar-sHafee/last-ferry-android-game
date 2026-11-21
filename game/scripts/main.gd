@@ -386,7 +386,7 @@ func open_credits(from: String) -> void:
 func credits() -> void:
 	title("THE LAST FERRY","Credits")
 	hud.label(hud,Rect2(56,151,790,48),"Game development · GPT 6.2 Astra",SERIF,31,hud.BRASS)
-	hud.label(hud,Rect2(56,213,790,147),"Harbor paintings created with OpenAI ImageGen. Dog bark recorded by Amada44. Thunder recorded by Bidgee. Keeper animation, machinery, puzzles and music were made for this voyage.\n\nBuilt with Godot Engine. Typography uses Yrsa and Liberation Mono.",ThemeDB.fallback_font,19,hud.PAPER,true)
+	hud.label(hud,Rect2(56,213,790,147),"Harbor paintings created with OpenAI ImageGen. Dog bark recorded by Amada44. Thunder recorded by Bidgee. Field recordings and their licenses are listed below. Keeper animation, machinery, puzzles and music were made for this voyage.\n\nBuilt with Godot Engine. Typography uses Yrsa and Liberation Mono.",ThemeDB.fallback_font,19,hud.PAPER,true)
 	hud.button(hud,Rect2(56,388,140,49),"Back",func(): set_screen(credits_return))
 	hud.button(hud,Rect2(212,388,174,49),"Licenses",func(): set_screen("licenses"))
 
@@ -397,7 +397,7 @@ func licenses() -> void:
 	box.wrap_mode=TextEdit.LINE_WRAPPING_BOUNDARY
 	box.position=Vector2(56,145)
 	box.size=Vector2(846,252)
-	var notices:=PackedStringArray([Engine.get_license_text(),FileAccess.get_file_as_string("res://audio/bark-license.txt"),FileAccess.get_file_as_string("res://audio/splash-license.txt"),FileAccess.get_file_as_string("res://audio/thunder-license.txt"),FileAccess.get_file_as_string("res://art/fonts/notices.txt")])
+	var notices:=PackedStringArray([Engine.get_license_text(),FileAccess.get_file_as_string("res://audio/bark-license.txt"),FileAccess.get_file_as_string("res://audio/splash-license.txt"),FileAccess.get_file_as_string("res://audio/thunder-license.txt"),FileAccess.get_file_as_string("res://audio/animal-recordings-license.txt"),FileAccess.get_file_as_string("res://art/fonts/notices.txt")])
 	for component in Engine.get_copyright_info():
 		notices.append(str(component.name))
 		for part in component.parts:

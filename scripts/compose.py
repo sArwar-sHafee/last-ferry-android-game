@@ -94,34 +94,7 @@ for side in [-1,1]:
     wings.append(swarm*.12)
 save("swarm_buzz",np.stack(wings,axis=1))
 
-t=timeline(.68)
-call=np.zeros_like(t)
-for onset, pitch in [(0,364),(.17,509),(.34,424)]:
-    x=np.maximum(0,t-onset)
-    phase=2*np.pi*(pitch*x+520*x*x+2*np.sin(2*np.pi*x*8))
-    rasp=np.sin(phase)+.36*np.sin(2*phase)+.18*np.sin(3*phase)
-    call+=.28*rasp*attack_decay(x,85,25)
-save("monkey_call",call+.17*noise(t,1300)*attack_decay(t,110,11))
+
+# Vocal cues in game/audio are field-recording excerpts credited in animal-recordings-license.txt.
 t=timeline(.18)
 save("rock_throw",.58*noise(t,3600)*attack_decay(t,34,31))
-
-t=timeline(.94)
-phase=2*np.pi*(67*t+19*t*t)+1.4*np.sin(2*np.pi*t*29)
-growl=.28*np.sin(phase)+.21*np.sin(2*phase)+.12*np.sin(3*phase)
-breath=.46*noise(t,1200)
-save("gorilla_call",(growl+breath)*attack_decay(t,26,4.4)*(1-.35*tone(t,8)))
-
-# Boarding grunt and the gorilla's two-beat chest display.
-t=timeline(.72)
-phase=2*np.pi*(105*t+17*t*t+1.6*np.sin(2*np.pi*t*9))
-grunt=.32*np.sin(phase)+.18*np.sin(3*phase)+.09*np.sin(5*phase)
-save("boar_call",(grunt+.45*noise(t,1450))*attack_decay(t,42,6.2)*(1+.23*tone(t,13)))
-
-t=timeline(.8)
-phase=2*np.pi*(72*t+24*t*t)+1.3*np.sin(2*np.pi*t*19)
-voice=(.24*np.sin(phase)+.21*np.sin(2*phase)+.27*noise(t,1550))*attack_decay(t,37,5.2)
-for beat in [.23,.51]:
-    after=np.maximum(0,t-beat)
-    thump=.30*tone(after,98)+.24*tone(after,184)+.20*noise(t,750)
-    voice+=thump*attack_decay(after,400,25)
-save("gorilla_intro",voice)

@@ -20,8 +20,8 @@ const VOYAGE := [
 		"The branches meet above the flood. Something stirs in the leaves.",[
 		[20,"Out of Soundings",330,"branches @s5 vine"],
 		[21,"The Outer Piles",320,"@16a swarm"],
-		[22,"Dogs at Anchor",316,"@17a spider"],
-		[23,"The Old Fish Market",312,"@18a monkey"],
+		[22,"Dogs at Anchor",316,"@17a spider giant_snake"],
+		[23,"The Old Fish Market",312,"@18a monkey rolling_log"],
 	]],
 	["The Pumpworks",preload("res://art/pumpworks.webp"),8,2,
 		"The pipes tremble. There is still pressure in the old main.",[
@@ -37,9 +37,9 @@ const VOYAGE := [
 	]],
 	["Boar Run",preload("res://art/reach07.webp"),7,4,
 		"The boar paws the charcoal road. Beyond the gate, the culverts have washed out.",[
-		[68,"Bracken Gate",258,"ride @14a"],
-		[69,"The Root Road",253,"ride @15a spillway"],
-		[71,"Split Hoof Ford",242,"ride @16a broken_jetty"],
+		[68,"Bracken Gate",258,"ride @14a monkey"],
+		[69,"The Root Road",253,"ride @15a boar_hound spillway"],
+		[71,"Split Hoof Ford",242,"ride @16a boar_spikes broken_jetty"],
 	]],
 	["The Engine Galleries",preload("res://art/reach08.webp"),8,5,
 		"The keeper leaves the boar at the gate. Heat rolls out of the galleries.",[
@@ -55,7 +55,7 @@ const VOYAGE := [
 	]],
 	["The Lens Works",preload("res://art/lensworks.webp"),10,6,
 		"Through a crack in the shutters, a thread of light.",[
-		[103,"A Line of Prisms",132,"tide @2a ray"],
+		[103,"A Line of Prisms",132,"flotilla @2a ray"],
 		[105,"The Silvered Room",103,"@l2 shutters @l3 hoist"],
 		[107,"The Prism Bath",76,"@5a wide_causeway gantry"],
 	]],

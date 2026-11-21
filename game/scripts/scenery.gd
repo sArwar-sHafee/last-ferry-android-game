@@ -157,7 +157,7 @@ func _draw() -> void:
 				draw_climber(cam)
 			elif not route.mounted.is_empty():
 				var foot:=route.pos-Vector2(cam,0)
-				draw_keeper(foot-Vector2(0,13),1,0,false,0)
+				draw_keeper(foot-Vector2(0,13),1,0,false,0,0,0,true)
 			elif route.held_crate>=0:
 				draw_hauling_keeper(cam)
 			else:
@@ -371,6 +371,21 @@ func draw_platform(p: Dictionary,cam: float) -> void:
 		return
 	if style=="cargo_net":
 		draw_cargo_net(Vector2(x,y),Vector2(p.base)-Vector2(cam,0),w)
+		return
+	if style=="stump":
+		poly([Vector2(x,y),Vector2(x+w,y),Vector2(x+w-9,y+30),Vector2(x+w+4,y+47),
+			Vector2(x-7,y+47),Vector2(x+7,y+33)],Color("#46342b"))
+		for j in 5:
+			var root:=Vector2(x+5+j*9,y+3)
+			line(root,root+Vector2(-2+j,29),Color("#745640"),1.6)
+		line(Vector2(x+1,y+1),Vector2(x+w-1,y+1),Color("#c8a273"),3)
+		return
+	if style=="grass":
+		draw_rect(Rect2(x,y,w,22),Color("#3c332a"))
+		line(Vector2(x,y),Vector2(x+w,y),Color("#87916a"),2)
+		for j in range(4,int(w)-4,9):
+			var blade:=Vector2(x+j,y+1)
+			line(blade,blade+Vector2(sin(j)*4,-3-j%7),Color("#67764e"),1.4)
 		return
 	if style=="bollard":
 		poly([Vector2(x+7,y+47),Vector2(x+11,y+8),Vector2(x+w-11,y+8),Vector2(x+w-7,y+47)],INK)
@@ -659,7 +674,7 @@ func draw_mara(foot: Vector2,seconds: float,facing := 1) -> void:
 		Vector2(-11,-30+gesture)],Color("#d3a15e"))
 	draw_set_transform(Vector2.ZERO)
 
-func draw_keeper(at: Vector2,facing: int,phase: float,on_ground: bool,speed: float,vertical_speed := 0.0,rotation := 0.0) -> void:
+func draw_keeper(at: Vector2,facing: int,phase: float,on_ground: bool,speed: float,vertical_speed := 0.0,rotation := 0.0,mounted := false) -> void:
 	var walk := clampf(absf(speed)/110,0,1)
 	var swing := sin(phase)*walk
 	var reach:=smoothstep(-160,255,vertical_speed)
@@ -669,13 +684,21 @@ func draw_keeper(at: Vector2,facing: int,phase: float,on_ground: bool,speed: flo
 		var hip := Vector2(i*3,-19)
 		var knee := Vector2(i*4+i*swing*4,-10-absf(swing)*1.2)
 		var foot := Vector2(i*4+i*swing*8,-1-maxf(0,-i*swing)*3)
-		if not on_ground:
-			knee=Vector2(-10,-14).lerp(Vector2(-5,-9),reach) if i<0 else Vector2(11,-17).lerp(Vector2(9,-10),reach)
-			foot=Vector2(-16,-8).lerp(Vector2(-8,-1),reach) if i<0 else Vector2(7,-11).lerp(Vector2(13,-1),reach)
+		if mounted:
+			knee=Vector2(-8,-12) if i<0 else Vector2(10,-14)
+			foot=Vector2(-13,-6) if i<0 else Vector2(9,-7)
+		elif not on_ground:
+			if i<0:
+				knee=Vector2(-3,-9).lerp(Vector2(-3,-8),reach)
+				foot=knee+Vector2(-8,-2).lerp(Vector2(-6,2),reach)
+			else:
+				knee=Vector2(3,-10)
+				foot=Vector2(3,-2).lerp(Vector2(4,-1),reach)
 		var cloth:=Color("#344849") if i<0 and not on_ground else INK
 		line(hip,knee,cloth,4.4)
 		line(knee,foot,cloth,3.6)
-		line(foot,foot+Vector2(4,0),INK,3)
+		var toe:=Vector2(-2.5,-2) if not on_ground and not mounted and i<0 else Vector2(4,0)
+		line(foot,foot+toe,INK,3)
 	poly([Vector2(-5,-33),Vector2(5,-33),Vector2(10,-18),Vector2(6,-15),Vector2(0,-17),Vector2(-10,-14),Vector2(-8,-25)],Color("#1b2b2c"))
 	line(Vector2(-5,-31),Vector2(-9,-18),Color("#62706a"),1.3)
 	poly([Vector2(-8,-34),Vector2(-6,-43),Vector2(-1,-48),Vector2(5,-46),Vector2(10,-39),Vector2(5,-38),Vector2(4,-32)],INK)
@@ -775,24 +798,7 @@ func draw_culvert(roof: Dictionary,cam: float) -> void:
 	var x:=bounds.position.x
 	var floor_y:=float(roof.floor)
 	var lip:=float(roof.y)
-	var acid:=Color("#c5ea58")
-	if roof.acid_mode==2:
-		var flow:=route.acid_bounds(roof)
-		flow.position-=offset
-		for nozzle in range(22,int(bounds.size.x)-18,18):
-			var source:=Vector2(x+nozzle+3,flow.position.y)
-			var previous:=source
-			for segment in range(1,9):
-				var t:=segment/8.0
-				var bend:=sin(route.time*9.0-t*5+nozzle)*2.8*t
-				var stream:=source+Vector2(bend,flow.size.y*t)
-				line(previous,stream,Color("#789c43"),6.5-t*3)
-				line(previous-Vector2(1,0),stream-Vector2(1,0),Color("#d1ec82"),1.4)
-				previous=stream
-			for bead in 4:
-				var t:=fposmod(route.time*2.5+nozzle*.17+bead*.25,1)
-				var splash:=Vector2((bead-1.5)*6*t,-27*t*(1-t))
-				draw_circle(previous+splash,1.8-t,Color(acid,1-t),true,-1,true)
+	if roof.type!="low": draw_acid_discharge(roof,cam)
 
 	if roof.moving:
 		for rail in [x-5,x+bounds.size.x+5]:
@@ -805,12 +811,97 @@ func draw_culvert(roof: Dictionary,cam: float) -> void:
 	line(Vector2(x,lip+1),Vector2(bounds.end.x,lip+1),EDGE,2)
 	for band in range(9,int(bounds.size.x)-9,18):
 		line(Vector2(x+band,lip+12),Vector2(x+band+5,lip+5),BRASS.darkened(.27),2)
-	if roof.type!="low":
-		for nozzle in range(22,int(bounds.size.x)-18,18):
-			draw_rect(Rect2(x+nozzle,lip+12,7,5),DARK)
-			if roof.acid_mode>0:
-				var strength:=.45+.55*absf(sin(route.time*19.0)) if roof.acid_mode==1 else 1.0
-				draw_circle(Vector2(x+nozzle+3,lip+13),2.7,Color(acid,strength),true,-1,true)
+
+func draw_acid_discharge(roof: Dictionary,cam: float) -> void:
+	var flow:=route.acid_bounds(roof)
+	flow.position.x-=cam
+	var cycle:=float(roof.cycle)
+	var discharge_age:=cycle-route.acid_release_time(roof)
+	var residue:=1.0-smoothstep(Passage.ACID_STOP,Passage.ACID_STOP+.34,cycle)
+	var wetness:=smoothstep(.055,.25,discharge_age)*residue
+	var clock:=route.time
+	var outlet:=flow.position
+	var height:=flow.size.y
+	# The manifold is fixed to the side rails behind the moving gate.
+	var pipe_y:=outlet.y-7
+	line(Vector2(outlet.x-8,pipe_y),Vector2(flow.end.x+8,pipe_y),INK,8)
+	line(Vector2(outlet.x-8,pipe_y-2),Vector2(flow.end.x+8,pipe_y-2),Color("#637065"),1.2)
+	for jet in 4:
+		var source:=outlet+Vector2(7.0+float(jet)*((flow.size.x-14.0)/3.0),0)
+		var spread:=(jet-1.5)*3.3
+		var impact:=Vector2(source.x+spread,flow.end.y-.8)
+		if wetness>.01:
+			draw_set_transform(impact,0,Vector2(1,.16))
+			draw_circle(Vector2.ZERO,lerpf(4.5,12.0,wetness),Color(.34,.46,.14,wetness*.70),true,-1,true)
+			draw_circle(Vector2(-1,-2),lerpf(3.0,8.0,wetness),Color(.72,.76,.35,wetness*.46),true,-1,true)
+			draw_set_transform(Vector2.ZERO)
+		draw_rect(Rect2(source-Vector2(6,7),Vector2(12,7)),Color("#323e37"))
+		line(source+Vector2(-5,-.5),source+Vector2(5,-.5),Color("#87917a"),1)
+		if roof.acid_mode==1:
+			var swelling:=smoothstep(-.55,0,discharge_age)*(.82+.18*sin(clock*17+jet))
+			draw_circle(source+Vector2(0,swelling*1.7),1.3+swelling*1.8,Color("#bdcf6b"),true,-1,true)
+		if roof.acid_mode!=2:
+			var settling:=cycle-Passage.ACID_STOP
+			if settling>=0 and settling<.13:
+				var tail:=impact+Vector2(spread*.3,-(20+jet*5)*(1.0-pow(settling/.13,2)))
+				line(tail,tail-Vector2(0,4),Color(.74,.83,.47,1.0-settling/.13),1.4)
+			continue
+
+		# Pressure sends out the leading edge, which accelerates and narrows as it falls.
+		var front_age:=maxf(0,.103+discharge_age)
+		var front:=minf(1.0,(290.0*front_age+1400.0*front_age*front_age)/height)
+		var vertices:=PackedVector2Array()
+		var colors:=PackedColorArray()
+		var indices:=PackedInt32Array()
+		var profile:=[-1.0,-.60,-.24,.32,1.0]
+		var tints:=[Color(.41,.54,.17,.21),Color(.58,.69,.28,.83),Color(.77,.83,.43,.88),
+			Color(.53,.66,.26,.81),Color(.43,.56,.20,.24)]
+		for segment in 13:
+			var depth:=front*segment/12.0
+			var pulse:=sin(clock*38-depth*9+jet*1.7)
+			var drift:=spread*depth+.9*pulse*depth
+			var half_width:=lerpf(5.6,2.5,depth)+depth*.78*pulse
+			var center:=source+Vector2(drift,height*depth-.65)
+			for strip in profile.size():
+				vertices.append(center+Vector2(profile[strip]*half_width,0))
+				var tint:Color=tints[strip]
+				tint.a*=1.0-depth*(.16+.13*pulse)
+				colors.append(tint)
+				if segment>0 and strip>0:
+					var here:=vertices.size()-1
+					var above:=here-profile.size()
+					indices.append_array(PackedInt32Array([above-1,above,here,here,here-1,above-1]))
+		RenderingServer.canvas_item_add_triangle_array(get_canvas_item(),indices,vertices,colors)
+
+		# Narrow streaks travel down the jet, faster near the floor.
+		for streak in 6:
+			var seed:=float(jet*6+streak)
+			var progress:=fposmod(clock*(5.0+.11*streak)+seed*.618,1)
+			var depth:=progress*lerpf(.56,1.0,progress)
+			if depth>front: continue
+			var drift:=spread*depth+sin(seed*7.13)*lerpf(3.0,1.6,depth)
+			var drop:=source+Vector2(drift,height*depth)
+			var tail:=Vector2(spread*.07,lerpf(3.0,10.0,depth))
+			if depth>.05:
+				line(drop,drop-tail,Color(.89,.91,.58,.58-.19*depth),1.15)
+			if depth>.46:
+				var fan:=signf(sin(seed*12.7))*(2.6+4.6*depth*depth)
+				draw_circle(drop+Vector2(fan,0),.6+.65*fposmod(seed*.71,1),Color(.78,.87,.47,.53),true,-1,true)
+		if front<1.0: continue
+
+		# Droplets leave the impact at different speeds and fall back to the deck.
+		var splash:=maxf(0,discharge_age-.044)
+		for bead in 11:
+			var seed:=float(jet*11+bead)
+			var flight:=fposmod(splash*(3.8+.18*bead)+seed*.618,1)*.27
+			var speed:=lerpf(46.0,106.0,fposmod(seed*.42,.98))
+			var lift:=speed*flight-410.0*flight*flight
+			if lift<=0.0: continue
+			var kick:=sin(seed*23.14+2.0)*lerpf(22.0,72.0,fposmod(seed*.73,1))
+			var drop:=impact+Vector2(kick*flight,-lift)
+			var tint:=Color(.85,.91,.57,1.0-flight*2.3)
+			line(drop,drop-Vector2(kick,820.0*flight-speed)*.017,tint,1.15)
+		draw_circle(impact-Vector2(0,1),2.3+.55*sin(clock*43+jet),Color(.82,.86,.49,.76),true,-1,true)
 
 func draw_device(d: Dictionary,cam: float) -> void:
 	var p:=Vector2(d.x-cam,d.y)
@@ -828,11 +919,14 @@ func draw_device(d: Dictionary,cam: float) -> void:
 				draw_gorilla_swing(foot,Vector2(d.grip)-Vector2(cam,0))
 			elif d.mode in [Passage.GorillaMode.ENTERING,Passage.GorillaMode.RUNNING]:
 				draw_gorilla(foot,true,8.0 if d.mode==Passage.GorillaMode.ENTERING else 15.0)
+		"snake":
+			draw_snake(d,p)
 		"spikes":
 			var pitch:=Passage.SPIKE_PITCH
-			var half_width:=Passage.SPIKE_COUNT*pitch*.5
+			var count:=int(d.count)
+			var half_width:=count*pitch*.5
 			draw_rect(Rect2(p-Vector2(half_width+3,2),Vector2(half_width*2+6,5)),DARK)
-			for tooth in Passage.SPIKE_COUNT:
+			for tooth in count:
 				var base:=p+Vector2(tooth*pitch-half_width,0)
 				var tip:=base+Vector2(pitch*.5,-Passage.SPIKE_HEIGHT)
 				poly([base,tip,base+Vector2(pitch,0)],INK)
@@ -841,6 +935,8 @@ func draw_device(d: Dictionary,cam: float) -> void:
 			draw_monkey(d,p,cam)
 		"cable_drum":
 			draw_cable_drum(d,p,cam)
+		"rolling_log":
+			draw_rolling_log(d,p,cam)
 		"swarm":
 			var insect:Vector2=d.flight-Vector2(cam,0)
 			for j in MOSQUITO_COUNT:
@@ -888,9 +984,17 @@ func draw_device(d: Dictionary,cam: float) -> void:
 				line(hip,knee,INK,3)
 				line(knee,knee+Vector2(4+swing*5,8-crouch),INK,2.5)
 			draw_circle(Vector2(20,-24),1.7,BRASS)
+			var bark:=float(d.bark_time)/.27
+			if bark>0:
+				var gap:=sin(PI*minf(1,(1-bark)*1.8))*6
+				poly([Vector2(19,-21),Vector2(30,-21),Vector2(26,-18+gap),Vector2(19,-17+gap)],Color("#583c3b"))
+				line(Vector2(19,-17+gap),Vector2(26,-18+gap),INK,2.7)
+				if gap>2: poly([Vector2(24,-21),Vector2(26,-21),Vector2(25,-18)],PAPER)
+				for j in 4:
+					var drift:=1-bark
+					var puff:=Vector2(31+drift*(15+j*5),-21+(j-1.5)*drift*5)
+					draw_circle(puff,1.2+drift*1.2,Color(.82,.86,.82,bark*.44),true,-1,true)
 			draw_set_transform(Vector2.ZERO,0,Vector2.ONE)
-			if d.mode==1:
-				for j in 2: draw_arc(dog+Vector2(-28,-23),7+j*5,PI*.82,PI*1.18,8,BRASS,1.5,true)
 		"rocker":
 			poly([p+Vector2(-20,55),p+Vector2(0,7),p+Vector2(20,55)],INK)
 			draw_circle(p+Vector2(0,7),7,DARK)
@@ -1015,6 +1119,137 @@ func draw_cable_drum(d: Dictionary,home: Vector2,cam: float) -> void:
 	draw_circle(Vector2.ZERO,9,DARK,true,-1,true)
 	draw_arc(Vector2.ZERO,7,0,TAU,24,EDGE,1.4,true)
 	draw_circle(Vector2.ZERO,3,INK,true,-1,true)
+	draw_set_transform(Vector2.ZERO,0,Vector2.ONE)
+
+# Shade each tapered length across its girth, from tail to head.
+# Painting in this order lets the foreground coil cover the tail where they cross.
+func draw_viper_length(start: Vector2,c1: Vector2,c2: Vector2,end: Vector2,r1: float,r2: float) -> void:
+	var count:=maxi(8,ceili((start.distance_to(c1)+c1.distance_to(c2)+c2.distance_to(end))/2.5))
+	var centers:=PackedVector2Array()
+	var radii:=PackedFloat32Array()
+	var normals:=PackedVector2Array()
+	for i in count+1:
+		var t:=float(i)/count
+		centers.append(start.bezier_interpolate(c1,c2,end,t))
+		radii.append(lerpf(r1,r2,smoothstep(0,1,t)))
+		var normal:=start.bezier_derivative(c1,c2,end,t).normalized().orthogonal()
+		if normal.y>0: normal=-normal
+		normals.append(normal)
+	# Keep the mesh continuous across joins. Only the sides have a dark edge.
+	var vertices:=PackedVector2Array()
+	var colors:=PackedColorArray()
+	var indices:=PackedInt32Array()
+	var cross_section:=[-1.0,-.80,-.36,.22,.78,1.0]
+	var hide:=[Color("#252a24"),Color("#5d5038"),Color("#88784f"),
+		Color("#9b895a"),Color("#ad9766"),Color("#394032")]
+	for i in centers.size():
+		var tangent:=(centers[mini(count,i+1)]-centers[maxi(0,i-1)]).normalized()
+		var side:=tangent.orthogonal()
+		for j in cross_section.size():
+			var across:float=cross_section[j]
+			vertices.append(centers[i]+side*radii[i]*across)
+			var shade_index:=j if side.y<=0 else cross_section.size()-1-j
+			colors.append(hide[shade_index])
+			if i>0 and j>0:
+				var v:=vertices.size()-1
+				var prev:=v-cross_section.size()
+				indices.append_array(PackedInt32Array([prev-1,prev,v,v, v-1,prev-1]))
+	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(),indices,vertices,colors)
+	# Dark saddles with a small ochre scale at the crest.
+	var spacing:=5.0
+	for i in range(1,count):
+		spacing+=centers[i].distance_to(centers[i-1])
+		var r:=radii[i]-1.8
+		if spacing<maxf(5,r*1.55) or r<1.3: continue
+		spacing=0
+		var p:=centers[i]
+		var n:=normals[i]
+		var along:=n.orthogonal()
+		poly([p+n*r*.92,p+n*r*.66+along*r*.51,p+along*r*.45-n*r*.26,
+			p-n*r*.61,p-along*r*.57+n*r*.20],Color("#443e2b"))
+		line(p+n*r*.82,p+n*r*.58+along*r*.30,Color("#c5aa72"),1.15)
+
+func draw_snake(snake: Dictionary,burrow: Vector2) -> void:
+	draw_set_transform(burrow,0,Vector2(1,.24))
+	draw_circle(Vector2.ZERO,39,Color("#574b37"),true,-1,true)
+	draw_circle(Vector2(-1,1),31,Color("#1a211c"),true,-1,true)
+	draw_set_transform(Vector2.ZERO)
+	if snake.mode==Passage.SnakeMode.HIDDEN: return
+	var coil:=0.0
+	var bite:=0.0
+	var exposed:=1.0
+	match int(snake.mode):
+		Passage.SnakeMode.WINDUP: coil=smoothstep(0,1,1-float(snake.timer)/Passage.SNAKE_WINDUP)
+		Passage.SnakeMode.BITE: bite=1
+		Passage.SnakeMode.RECOVER: bite=smoothstep(0,1,float(snake.timer)/Passage.SNAKE_REST)
+		Passage.SnakeMode.RETREAT:
+			exposed=smoothstep(0,1,float(snake.timer)/Passage.SNAKE_RETREAT)
+			bite=exposed
+	if exposed<.015: return
+	draw_set_transform(burrow,0,Vector2.ONE*exposed)
+	var sway:=sin(route.time*2.4)*(1-bite)*(1-coil)
+	var head:=Vector2(lerpf(-24,-Passage.SNAKE_REACH+15,bite)+coil*11+sway*1.8,
+		lerpf(-49,-28,bite)-coil*19+sway)
+	var haunch:=Vector2(19-coil*5,-17-coil*3)
+	draw_viper_length(Vector2(49,-16),Vector2(34,-20),Vector2(52,0),Vector2(17,-5),1,5.5)
+	draw_viper_length(Vector2(17,-5),Vector2(-33,3),Vector2(-51,-11),Vector2(-19,-17),5.5,8)
+	draw_viper_length(Vector2(-19,-17),Vector2(5,-24),Vector2(53,-9),haunch,8,8)
+	var bend:=Vector2(-10,-30).lerp(Vector2(-40,-17),bite)+Vector2(coil*4,-coil*4)
+	var neck_tangent:=Vector2(20,-10).lerp(Vector2(-21,-5),bite)
+	draw_viper_length(haunch,haunch+Vector2(-10,-2),bend-neck_tangent,bend,8,6.8)
+	draw_viper_length(bend,bend+neck_tangent,head+Vector2(27,6),head,6.8,4.3)
+	# Hinged lower jaw and recurved fang remain attached throughout the strike.
+	draw_set_transform(burrow+head*exposed,0,Vector2.ONE*exposed)
+	var jaw:=Vector2(-14,4+9*bite)
+	poly([Vector2(7,1),Vector2(3,7),jaw+Vector2(1,2),jaw],Color("#d6be8a"))
+	poly([Vector2(6,1),jaw,Vector2(-14,2)],Color("#613e37"))
+	if bite>.35:
+		poly([Vector2(-11,1),Vector2(-8,1),Vector2(-9,4+4*bite)],PAPER)
+	poly([Vector2(-16,0),Vector2(-14,-4),Vector2(-6,-6),Vector2(1,-10),
+		Vector2(10,-8),Vector2(12,-3),Vector2(8,3),Vector2(2,5),Vector2(-14,3)],Color("#34392b"))
+	poly([Vector2(-15,0),Vector2(-12,-4),Vector2(-5,-5),Vector2(2,-9),
+		Vector2(9,-7),Vector2(10,-3),Vector2(4,0),Vector2(-5,1)],Color("#a08b58"))
+	line(Vector2(-14,1.6),Vector2(0,2.6),Color("#d3be91"),1.5)
+	line(Vector2(-2,-3),Vector2(7,-4),Color("#383c2c"),2.5)
+	draw_circle(Vector2(-4.5,-3.4),2.1,Color("#f0c36b"),true,-1,true)
+	line(Vector2(-4.5,-4.7),Vector2(-4.5,-2.1),INK,1)
+	draw_circle(Vector2(-12.6,-1.8),.8,INK,true,-1,true)
+	var flick:=sin(route.time*6.5)
+	if bite<.12 and flick>.35:
+		var tip:=Vector2(-16-flick*10,3+sin(route.time*13))
+		line(Vector2(-15,2),tip,Color("#a55e53"),1.3)
+		line(tip,tip+Vector2(-3,-1.7),Color("#b46b5e"),1)
+		line(tip,tip+Vector2(-3,1.7),Color("#b46b5e"),1)
+	draw_set_transform(Vector2.ZERO)
+
+func draw_rolling_log(d: Dictionary,home: Vector2,cam: float) -> void:
+	var radius:=Passage.DRUM_RADIUS
+	var center:=Vector2(float(d.roll_x)-cam,home.y-radius)
+	var front:=center-Vector2(8,0)
+	var rear:=center+Vector2(16,-5)
+	var angle:=(float(d.roll_x)-float(d.x))/radius
+	var tilt:=.14*sin(angle)
+	if d.mode<=1:
+		tilt+=.11*sin(route.time*29)*smoothstep(float(d.warning),0.0,float(d.timer)) if d.mode==1 else 0.0
+		poly([home+Vector2(-39,0),home+Vector2(-29,-10),home+Vector2(-19,0)],Color("#59605a"))
+	draw_circle(rear,radius-3,Color("#59412e"),true,-1,true)
+	poly([front-Vector2(0,radius),rear-Vector2(0,radius-3),rear+Vector2(1,radius-4),front+Vector2(0,radius)],
+		Color("#563c2d"))
+	for ridge in 7:
+		var height:=-16.0+ridge*5.2
+		line(front+Vector2(0,height),rear+Vector2(3,height*.86),Color("#79553a") if ridge%2 else Color("#38291f"),1.8)
+	line(front+Vector2(4,-17+tilt*14),rear+Vector2(-6,-15+tilt*14),Color("#788256"),3)
+	draw_set_transform(front,angle,Vector2.ONE)
+	var rim:=PackedVector2Array()
+	for i in 24:
+		var direction:=Vector2.from_angle(i*TAU/24)
+		rim.append(direction*(radius+.9*sin(i*5.3)))
+	draw_colored_polygon(rim,Color("#392a22"))
+	draw_circle(Vector2(-1,1),radius-3,Color("#bc8a59"),true,-1,true)
+	for ring in [4,8,12,15]:
+		draw_arc(Vector2(-2,1),ring,.46,TAU+.23,30,Color("#85583c"),1.3,true)
+	line(Vector2(-1,2),Vector2(14,-8),Color("#67442f"),1.6)
+	draw_circle(Vector2(-2,1),2,Color("#673f2a"),true,-1,true)
 	draw_set_transform(Vector2.ZERO,0,Vector2.ONE)
 
 func draw_chase_ropes(cam: float) -> void:
@@ -1331,20 +1566,24 @@ func draw_boar_tether(foot: Vector2) -> void:
 
 func draw_mount(foot: Vector2,kind: String,phase: float) -> void:
 	if kind=="ride":
-		poly([foot+Vector2(-24,-13),foot+Vector2(-15,-26),foot+Vector2(6,-24),foot+Vector2(17,-17),foot+Vector2(28,-13),foot+Vector2(26,-8),foot+Vector2(7,-7),foot+Vector2(-15,-6)],INK)
+		var coat:=Color("#171918")
+		var shoulder:=Color("#272a28")
+		var underside:=Color("#0f1110")
 		for j in 4:
-			var hip:=foot+Vector2(-15+j*8,-10)
-			line(hip,hip+Vector2(4*sin(phase+j*2),10),INK,3)
-		poly([foot+Vector2(-22,-15),foot+Vector2(-15,-24),foot+Vector2(1,-24),
-			foot+Vector2(13,-19),foot+Vector2(5,-12),foot+Vector2(-12,-10)],Color("#62493b"))
-		for tuft in 8:
-			var root:=foot+Vector2(-16+tuft*2.8,-23+maxf(0,tuft-5))
-			poly([root+Vector2(-3,-3),root+Vector2(4,0),root+Vector2(0,3)],Color("#786150"))
-		poly([foot+Vector2(9,-19),foot+Vector2(9,-27),foot+Vector2(16,-20)],Color("#906e54"))
-		draw_circle(foot+Vector2(18,-16),1.3,BRASS)
-		line(foot+Vector2(25,-13),foot+Vector2(28,-12),Color("#a97f68"),3.5)
-		poly([foot+Vector2(20,-10),foot+Vector2(26,-17),foot+Vector2(24,-10)],PAPER)
-		draw_arc(foot+Vector2(-23,-17),4,.5,4.8,10,INK,2,true)
+			var hip:=foot+Vector2(-16+j*10,-11)
+			var knee:=hip+Vector2(3.0*sin(phase+j*2),6)
+			line(hip,knee,underside,4)
+			line(knee,knee+Vector2(1.5*sin(phase+j*2),4),coat,3)
+		poly([foot+Vector2(-25,-12),foot+Vector2(-24,-21),foot+Vector2(-15,-25),
+			foot+Vector2(-2,-25),foot+Vector2(10,-28),foot+Vector2(19,-21),foot+Vector2(30,-15),
+			foot+Vector2(29,-10),foot+Vector2(16,-8),foot+Vector2(5,-9),
+			foot+Vector2(-10,-7),foot+Vector2(-21,-9)],coat)
+		line(foot+Vector2(-20,-21),foot+Vector2(-7,-24),shoulder,1.7)
+		poly([foot+Vector2(10,-21),foot+Vector2(9,-29),foot+Vector2(16,-26),foot+Vector2(17,-21)],shoulder)
+		draw_circle(foot+Vector2(18,-19),1.3,BRASS)
+		line(foot+Vector2(26,-15),foot+Vector2(30,-13),shoulder,3.5)
+		poly([foot+Vector2(21,-10),foot+Vector2(26,-15),foot+Vector2(24,-9)],PAPER)
+		draw_arc(foot+Vector2(-24,-17),4,.5,4.8,10,coat,2,true)
 	else:
 		draw_rect(Rect2(foot-Vector2(23,19),Vector2(46,12)),DARK)
 		for j in [-15,15]: draw_circle(foot+Vector2(j,-4),5,INK)
